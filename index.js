@@ -12,9 +12,11 @@ const client = new Client({
 const OWNER_ROLES = ['1536796640399200447', '1539678217311617195'];
 const SUPPORT_ROLE_ID = '1536796640399200447';
 const TICKET_CHANNEL_ID = '1552755184814530600';
+const STAFF_ROLE_ID = '1530435760183054337';
 
 const afkUsers = new Map();
 const streaks = new Map();
+const messageCounts = new Map();
 
 client.once('ready', async () => {
   console.log(`🚀 تم تشغيل البوت بنجاح: ${client.user.tag}`);
@@ -50,6 +52,9 @@ client.once('ready', async () => {
 
 client.on('messageCreate', async message => {
   if (message.author.bot || !message.guild) return;
+
+  const userMsgCount = messageCounts.get(message.author.id) || 0;
+  messageCounts.set(message.author.id, userMsgCount + 1);
 
   if (message.content.trim() === 'السلام عليكم') {
     return message.reply('وعليكم السلام منور').catch(() => {});
@@ -87,6 +92,14 @@ client.on('messageCreate', async message => {
     streaks.set(message.author.id, userStreak);
   }
 
+  const currentStreak = userStreak.count;
+  const originalNickname = message.member.displayName.replace(/🔥\d+\s*/g, '').trim();
+  const desiredNickname = `🔥${currentStreak} ${originalNickname}`;
+  
+  if (message.member.manageable && message.member.nickname !== desiredNickname) {
+    message.member.setNickname(desiredNickname).catch(() => {});
+  }
+
   if (!message.content.startsWith('+')) return;
 
   const args = message.content.slice(1).trim().split(/ +/);
@@ -94,10 +107,13 @@ client.on('messageCreate', async message => {
   const sendError = (text) => message.reply(`❌ **خطأ:** ${text}`).catch(() => {});
   
   let isOwner = false;
+  let isStaff = false;
   try {
     isOwner = message.member.permissions.has(PermissionFlagsBits.Administrator) || message.member.roles.cache.some(role => OWNER_ROLES.includes(role.id));
+    isStaff = isOwner || message.member.roles.cache.has(STAFF_ROLE_ID);
   } catch (e) {
     isOwner = false;
+    isStaff = false;
   }
 
   if (command === 'help' || command === 'اوامر') {
@@ -107,15 +123,15 @@ client.on('messageCreate', async message => {
       .setColor(0x3498DB)
       .addFields(
         { name: '`+باند`', value: '**لتبنيد العضو من السيرفر**' },
-        { name: '`+kick`', value: '**لطرد العضو من السيرفر**' },
+        { name: '`+برا`', value: '**لطرد العضو من السيرفر**' },
         { name: '`+اخفاء`', value: '**لإخفاء الروم عن الأعضاء**' },
         { name: '`+ظهور`', value: '**لإظهار الروم للأعضاء**' },
         { name: '`+رول`', value: '**إعطاء رتبة لعضو محدد**' },
         { name: '`+شيل`', value: '**إزالة رتبة من عضو محدد**' },
         { name: '`+العاب`', value: '**لألعاب عشوائية ممتعة**' },
         { name: '`+afk`', value: '**لتفعيل وضع الانشغال والابتعاد**' },
-        { name: '`+ستريك`', value: `**عرض عدد أيام الستريك المتتالية الخاص بك (🔥${userStreak.count})**` },
-        { name: '`+استدعاء`', value: '**استدعاء عضو مع منشن والسبب**' }
+        { name: '`+ستريك`', value: `**عرض عدد أيام الستريك المتتالية (🔥${currentStreak})**` },
+        { name: '`+نك`', value: '**تغيير النك نيم لأي عضو مع المنشن**' }
       );
 
     const page2 = new EmbedBuilder()
@@ -129,9 +145,9 @@ client.on('messageCreate', async message => {
         { name: '`+say`', value: '**جعل البوت يكرر كلامك**' },
         { name: '`+تايم`', value: '**إعطاء ميوت مؤقت (تايم آوت)**' },
         { name: '`+انتايم`', value: '**فك التايم آوت عن العضو**' },
-        { name: '`+رول-جماعي`', value: '**إعطاء رتبة لجميع أعضاء السيرفر**' },
-        { name: '`+close`', value: '**إغلاق التكت الحالية**' },
-        { name: '`+delete`', value: '**حذف التكت الحالية**' }
+        { name: '`+راتبي`', value: '**عرض الراتب اليومي وعدد الرسائل**' },
+        { name: '`+close`', value: '**إغلاق وتغيير اسم التكت إلى closed**' },
+        { name: '`+delete`', value: '**حذف التكت الحالية (داخل التكتات فقط)**' }
       );
 
     const row = new ActionRowBuilder().addComponents(
@@ -177,10 +193,10 @@ client.on('messageCreate', async message => {
     }
   }
 
-  if (command === 'kick') {
+  if (command === 'برا' || command === 'kick') {
     if (!isOwner && !message.member.permissions.has(PermissionFlagsBits.KickMembers)) return sendError('ليس لديك صلاحية لاستخدام هذا الأمر!');
     const target = message.mentions.members.first() || message.guild.members.cache.get(args[0]);
-    if (!target) return sendError('اكتب: `+kick @العضو [السبب]`');
+    if (!target) return sendError('اكتب: `+برا @العضو [السبب]`');
     const reason = args.slice(1).join(' ') || 'بدون سبب';
     try {
       await target.kick(reason);
@@ -188,6 +204,25 @@ client.on('messageCreate', async message => {
     } catch (e) {
       sendError('لا يمكنني طرد هذا العضو!');
     }
+  }
+
+  if (command === 'نك' || command === 'نيكنيم') {
+    if (!isOwner && !message.member.permissions.has(PermissionFlagsBits.ManageNicknames)) return sendError('ليس لديك صلاحية لتغيير النك نيم!');
+    const target = message.mentions.members.first();
+    const newNick = args.slice(1).join(' ');
+    if (!target || !newNick) return sendError('اكتب هكذا: `+نك @العضو الاسم_الجديد`');
+    try {
+      await target.setNickname(newNick);
+      await message.reply(`✅ **تم تغيير النك نيم للعضو ${target} بنجاح إلى: (${newNick})**`);
+    } catch (e) {
+      sendError('لا يمكنني تغيير النك نيم لهذا العضو (رتبته أعلى من البوت أو رتبتك)!');
+    }
+  }
+
+  if (command === 'راتبي') {
+    if (!isStaff) return message.reply('❌ **هذا الأمر مخصص للإداريين فقط!**').catch(() => {});
+    const count = messageCounts.get(message.author.id) || 0;
+    return message.reply(`راتبك ( ليس محدداً بعد ) عدد الرسايل (${count})`).catch(() => {});
   }
 
   if (command === 'اخفاء') {
@@ -261,7 +296,7 @@ client.on('messageCreate', async message => {
   }
 
   if (command === 'ستريك') {
-    return message.reply(`🔥 **لديك ستريك متواصل بعدد:** \`${userStreak.count}\` **يوم! حافظ على استمرارك.**`).catch(() => {});
+    return message.reply(`🔥 **لديك ستريك متواصل بعدد:** \`${currentStreak}\` **يوم! حافظ على استمرارك.**`).catch(() => {});
   }
 
   if (command === 'استدعاء') {
@@ -426,16 +461,26 @@ client.on('messageCreate', async message => {
     const isSupport = message.member.permissions.has(PermissionFlagsBits.Administrator) || message.member.roles.cache.some(r => OWNER_ROLES.includes(r.id) || r.id === SUPPORT_ROLE_ID);
     if (!isSupport) return message.reply('❌ **هذا الأمر مخصص للدعم الفني والأونرية فقط!**').catch(() => {});
     
-    await message.channel.send('🔒 **جاري إغلاق التكت...**').catch(() => {});
-    setTimeout(() => {
-      message.channel.delete().catch(() => {});
-    }, 2000);
+    if (!message.channel.name.startsWith('ticket-') && message.channel.name !== 'closed') {
+      return message.reply('❌ **هذا الأمر يُستخدم داخل التكتات فقط!**').catch(() => {});
+    }
+
+    try {
+      await message.channel.setName('closed');
+      await message.channel.send('🔒 **تم إغلاق التكت وتغيير اسم الروم إلى closed.**').catch(() => {});
+    } catch (e) {
+      message.reply('❌ **حدث خطأ أثناء تغيير اسم الروم.**').catch(() => {});
+    }
     return;
   }
 
   if (command === 'delete') {
     const isSupport = message.member.permissions.has(PermissionFlagsBits.Administrator) || message.member.roles.cache.some(r => OWNER_ROLES.includes(r.id) || r.id === SUPPORT_ROLE_ID);
     if (!isSupport) return message.reply('❌ **هذا الأمر مخصص للدعم الفني والأونرية فقط!**').catch(() => {});
+
+    if (!message.channel.name.startsWith('ticket-') && message.channel.name !== 'closed') {
+      return message.reply('❌ **لا يمكنك استخدام أمر الحذف إلا داخل روم التكتات فقط!**').catch(() => {});
+    }
 
     await message.channel.send('🗑️ **جاري حذف التكت نهائياً...**').catch(() => {});
     setTimeout(() => {
@@ -479,7 +524,7 @@ client.on('interactionCreate', async interaction => {
         const ticketRow = new ActionRowBuilder().addComponents(
           new ButtonBuilder().setCustomId('pay_method').setLabel('طريقة الدفع (بنكي / adamc)').setStyle(ButtonStyle.Secondary).setEmoji('💳'),
           new ButtonBuilder().setCustomId('claim_ticket').setLabel('استلام التكت').setStyle(ButtonStyle.Success).setEmoji('✅'),
-          new ButtonBuilder().setCustomId('close_ticket').setLabel('إغلاق وحذف التكت').setStyle(ButtonStyle.Danger).setEmoji('🔒')
+          new ButtonBuilder().setCustomId('close_ticket').setLabel('إغلاق وتغيير اسم التكت').setStyle(ButtonStyle.Danger).setEmoji('🔒')
         );
 
         await ticketChannel.send({ content: `${member} | <@&${SUPPORT_ROLE_ID}>`, embeds: [ticketEmbed], components: [ticketRow] }).catch(() => {});
@@ -530,7 +575,7 @@ client.on('interactionCreate', async interaction => {
       const disabledRow = new ActionRowBuilder().addComponents(
         new ButtonBuilder().setCustomId('pay_method').setLabel('طريقة الدفع (بنكي / adamc)').setStyle(ButtonStyle.Secondary).setEmoji('💳'),
         new ButtonBuilder().setCustomId('claim_ticket').setLabel('تم الاستلام').setStyle(ButtonStyle.Success).setEmoji('✅').setDisabled(true),
-        new ButtonBuilder().setCustomId('close_ticket').setLabel('إغلاق وحذف التكت').setStyle(ButtonStyle.Danger).setEmoji('🔒')
+        new ButtonBuilder().setCustomId('close_ticket').setLabel('إغلاق وتغيير اسم التكت').setStyle(ButtonStyle.Danger).setEmoji('🔒')
       );
 
       await interaction.update({ embeds: [embed], components: [disabledRow] }).catch(() => {});
@@ -551,10 +596,12 @@ client.on('interactionCreate', async interaction => {
         return interaction.reply({ content: '❌ ليس لديك صلاحية لإغلاق هذا التكت!', ephemeral: true }).catch(() => {});
       }
 
-      await interaction.reply('🔒 جاري حذف التكت وإغلاقه خلال ثوانٍ...').catch(() => {});
-      setTimeout(() => {
-        interaction.channel.delete().catch(() => {});
-      }, 3000);
+      try {
+        await interaction.channel.setName('closed');
+        await interaction.reply({ content: '🔒 **تم إغلاق التكت وتغيير اسم الروم إلى closed.**', ephemeral: false }).catch(() => {});
+      } catch (e) {
+        await interaction.reply({ content: '❌ **حدث خطأ أثناء تغيير اسم الروم.**', ephemeral: true }).catch(() => {});
+      }
     }
   } else if (interaction.isModalSubmit()) {
     if (interaction.customId === 'payment_modal') {
