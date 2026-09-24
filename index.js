@@ -1,6 +1,6 @@
-const { Client, GatewayIntentBits, REST, Routes, SlashCommandBuilder, EmbedBuilder } = require('discord.js');
+const { Client, GatewayIntentBits, REST, Routes, SlashCommandBuilder, EmbedBuilder, PermissionFlagsBits } = require('discord.js');
 
-// 1. إعداد البوت مع الصلاحيات
+// 1. إعداد البوت مع الصلاحيات المطلوبة
 const client = new Client({
   intents: [
     GatewayIntentBits.Guilds,
@@ -9,7 +9,7 @@ const client = new Client({
   ]
 });
 
-// 2. قائمة الجوائز والنتائج مع الألوان
+// 2. قائمة جوائز صندوق الحظ
 const boxItems = [
   {
     name: "🪙 صرة عملات ذهبية",
@@ -43,7 +43,6 @@ const boxItems = [
   }
 ];
 
-// دالة إنشاء الامبيد
 function createBoxEmbed(user) {
   const reward = boxItems[Math.floor(Math.random() * boxItems.length)];
   return new EmbedBuilder()
@@ -56,14 +55,18 @@ function createBoxEmbed(user) {
     .setTimestamp();
 }
 
-// 3. تسجيل أمر السلاش تلقائياً عند التشغيل
-client.once('ready', async () => {
-  console.log(`✅ البوت شغال بنجاح باسم: ${client.user.tag}`);
+// 3. تسجيل أوامر السلاش (/box و /ban) عند التشغيل
+client.once('ready', async () => {console.log(`✅ البوت شغال بنجاح باسم: ${client.user.tag}`);
 
   const commands = [
     new SlashCommandBuilder()
       .setName('box')
-      .setDescription('افتح صندوق الحظ العشوائي واحصل على جائزتك!')
+      .setDescription('افتح صندوق الحظ العشوائي واحصل على جائزتك!'),
+    new SlashCommandBuilder()
+      .setName('ban')
+      .setDescription('حظر عضو من السيرفر')
+      .addUserOption(option => option.setName('target').setDescription('العضو المراد حظره').setRequired(true))
+      .addStringOption(option => option.setName('reason').setDescription('سبب الحظر'))
   ];
 
   const rest = new REST({ version: '10' }).setToken(process.env.DISCORD_TOKEN);
@@ -73,30 +76,94 @@ client.once('ready', async () => {
       Routes.applicationCommands(client.user.id),
       { body: commands }
     );
-    console.log('✅ تم تسجيل أمر /box بنجاح!');
+    console.log('✅ تم تسجيل الأوامر بنجاح!');
   } catch (error) {
     console.error('❌ خطأ في تسجيل الأوامر:', error);
   }
 });
 
-// 4. الاستجابة لأمر السلاش /box
+// 4. الاستجابة لأوامر السلاش (/box و /ban)
 client.on('interactionCreate', async interaction => {
   if (!interaction.isChatInputCommand()) return;
+
   if (interaction.commandName === 'box') {
     const embed = createBoxEmbed(interaction.user);
     await interaction.reply({ embeds: [embed] });
   }
-});
 
-// 5. الاستجابة للأمر المكتوب (box أو !box أو بوكس)
-client.on('messageCreate', async message => {
-  if (message.author.bot) return;
-  const content = message.content.toLowerCase().trim();
-  if (content === 'box' || content === '!box' || content === 'بوكس') {
-    const embed = createBoxEmbed(message.author);
-    await message.reply({ embeds: [embed] });
+  if (interaction.commandName === 'ban') {
+    if (!interaction.member.permissions.has(PermissionFlagsBits.BanMembers)) {
+      return interaction.reply({ content: '❌ ليس لديك صلاحية حظر الأعضاء!', ephemeral: true });
+    }
+
+    const target = interaction.options.getMember('target');
+    const reason = interaction.options.getString('reason') || 'لم يتم تحديد سبب';
+
+    if (!target) return interaction.reply({ content: '❌ العضو غير موجود في السيرفر!', ephemeral: true });
+    if (!target.bannable) return interaction.reply({ content: '❌ لا يمكنني حظر هذا العضو (رتبته أعلى مني أو لا أملك صلاحيات كافية)!', ephemeral: true });
+
+    try {
+      await target.ban({ reason });
+      const embed = new EmbedBuilder()
+        .setTitle('🔨 تم حظر العضو بنجاح!')
+        .setDescription(`• **العضو المحظور:** ${target.user.tag}\n• **بواسطة:** ${interaction.user}\n• **السبب:** ${reason}`)
+        .setColor(0xFF0000)
+        .setTimestamp();
+      await interaction.reply({ embeds: [embed] });
+    } catch (err) {
+      console.error(err);
+      await interaction.reply({ content: '❌ حدث خطأ أثناء تنفيذ الحظر!', ephemeral: true });
+    }
   }
 });
 
-// 6. تشغيل البوت عبر التوكن
-client.login(process.env.DISCORD_TOKEN);
+// 5. الاستجابة للأوامر الكتابية (box أو !box) و أمر البان الاختصاري (تف)
+client.on('messageCreate', async message => {
+  if (message.author.bot || !message.guild) return;
+
+  const args = message.content.trim().split(/ +/);
+  const command = args.shift().toLowerCase();
+
+  // أمر الصندوق
+  if (command === 'box' || command === '!box' || command === 'بوكس') {
+    const embed = createBoxEmbed(message.author);
+    return message.reply({ embeds: [embed] });
+  }
+
+  // أمر البان بالاختصار (تف) أو (!ban أو بان)
+  if (command === 'تف' || command === '!ban' || command === 'بان') {
+    // التأكد من صلاحية الشخص
+    if (!message.member.permissions.has(PermissionFlagsBits.BanMembers)) {
+      return message.reply('❌ ليس لديك صلاحية حظر الأعضاء (`BAN_MEMBERS`)!');
+    }
+
+    // تحديد العضو المراد حظره (عبر المنشن أو الـ ID)
+    const target = message.mentions.members.first() || await message.guild.members.fetch(args[0]).catch(() => null);
+
+    if (!target) {
+      return message.reply('❌ يرجى تحديد العضو المطلوب حظره! مثال:\n`تف @user السبب`');
+    }
+
+    if (target.id === message.author.id) return message.reply('❌ لا يمكنك حظر نفسك!');
+    if (target.id === client.user.id) return message.reply('❌ لا يمكنك حظري!');
+    if (!target.bannable) return message.reply('❌ لا أستطيع حظر هذا العضو! قد تكون رتبته أعلى مني.');
+
+    const reason = args.slice(1).join(' ') || 'لم يتم تحديد سبب';
+
+    try {
+      await target.ban({ reason });
+      const banEmbed = new EmbedBuilder()
+        .setTitle('🔨 تم حظر العضو بنجاح!')
+        .setDescription(`• **العضو المحظور:** ${target.user.tag}\n• **بواسطة:** ${message.author}\n• **السبب:** ${reason}`).setColor(0xFF0000)
+        .setTimestamp();
+
+      await message.reply({ embeds: [banEmbed] });
+    } catch (error) {
+      console.error(error);
+      message.reply('❌ حدث خطأ أثناء محاولة حظر العضو!');
+    }
+  }
+});
+
+// 6. تشغيل البوت
+client.login(process.env.DIوSCORD_TOKEN);
