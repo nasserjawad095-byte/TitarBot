@@ -443,9 +443,9 @@ client.on('messageCreate', async message => {
     await message.reply('⏳ **جاري إعطاء الرول لجميع أعضاء السيرفر...**').catch(() => {});
     
     try {
-      await message.guild.members.fetch();
+      const members = await message.guild.members.fetch();
       let count = 0;
-      message.guild.members.cache.forEach(async member => {
+      members.forEach(async member => {
         if (!member.user.bot && !member.roles.cache.has(role.id)) {
           await member.roles.add(role).catch(() => {});
           count++;
@@ -505,7 +505,7 @@ client.on('interactionCreate', async interaction => {
 
       try {
         const ticketChannel = await guild.channels.create({
-          name: `ticket-${member.user.username}`,
+          name: `ticket-${member.user.username.toLowerCase().replace(/[^a-z0-9]/g, '') || member.id}`,
           type: ChannelType.GuildText,
           permissionOverwrites: [
             { id: guild.id, deny: [PermissionFlagsBits.ViewChannel] },
@@ -565,11 +565,6 @@ client.on('interactionCreate', async interaction => {
         isSupport = false;
       }
       if (!isSupport) return interaction.reply({ content: '❌ هذا الزر مخصص للدعم الفني فقط!', ephemeral: true }).catch(() => {});
-
-      const ticketCreator = interaction.channel.name.replace('ticket-', '');
-      if (interaction.user.username.toLowerCase() === ticketCreator.toLowerCase()) {
-        return interaction.reply({ content: '❌ لا يمكنك استلام التكت الخاصة بك!', ephemeral: true }).catch(() => {});
-      }
 
       const embed = EmbedBuilder.from(interaction.message.embeds[0]).addFields({ name: 'تم الاستلام بواسطة', value: `${interaction.user}`, inline: false });
       const disabledRow = new ActionRowBuilder().addComponents(
