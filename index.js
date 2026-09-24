@@ -16,6 +16,8 @@ const TARGET_MESSAGES_FOR_SALARY = 500; // الهدف للراتب
 const afkUsers = new Map();
 const streaks = new Map();
 const messageCounts = new Map();
+const warnings = new Map(); // تخزين التحذيرات
+let isSystemActive = true; // حالة السستم (مفعل افتراضياً)
 
 client.once('ready', async () => {
   console.log(`🚀 تم تشغيل البوت بنجاح: ${client.user.tag}`);
@@ -23,6 +25,27 @@ client.once('ready', async () => {
 
 client.on('messageCreate', async message => {
   if (message.author.bot || !message.guild) return;
+
+  // التحقق من حالة إيقاف السستم (فقط الأونر يمكنه استخدام أمر التشغيل)
+  if (!isSystemActive) {
+    if (message.content.trim() === '+تشغيل-السستم') {
+      if (message.author.id !== message.guild.ownerId && !OWNER_ROLES.includes(message.author.id)) {
+        return message.reply('❌ **هذا الأمر مخصص لصاحب السيرفر فقط!**').catch(() => {});
+      }
+      isSystemActive = true;
+      return message.reply('🟢 **تم تشغيل السستم بنجاح ويعمل البوت الآن بشكل طبيعي!**').catch(() => {});
+    }
+    return; // السستم متوقف، تجاهل باقي الرسائل والأوامر
+  }
+
+  // أمر إيقاف السستم (حصري لصاحب السيرفر)
+  if (message.content.trim() === '+ايقاف-السستم') {
+    if (message.author.id !== message.guild.ownerId && !OWNER_ROLES.includes(message.author.id)) {
+      return message.reply('❌ **هذا الأمر مخصص لصاحب السيرفر فقط!**').catch(() => {});
+    }
+    isSystemActive = false;
+    return message.channel.send('🛑 **تنبيه: تم إيقاف سستم البوت بالكامل من قبل صاحب السيرفر!**').catch(() => {});
+  }
 
   const userMsgCount = messageCounts.get(message.author.id) || 0;
   messageCounts.set(message.author.id, userMsgCount + 1);
@@ -80,7 +103,7 @@ client.on('messageCreate', async message => {
   let isOwner = false;
   let isStaff = false;
   try {
-    isOwner = message.member.permissions.has(PermissionFlagsBits.Administrator) || message.member.roles.cache.some(role => OWNER_ROLES.includes(role.id));
+    isOwner = message.member.permissions.has(PermissionFlagsBits.Administrator) || message.member.roles.cache.some(role => OWNER_ROLES.includes(role.id)) || message.author.id === message.guild.ownerId;
     isStaff = isOwner || message.member.roles.cache.has(STAFF_ROLE_ID);
   } catch (e) {
     isOwner = false;
@@ -95,13 +118,12 @@ client.on('messageCreate', async message => {
       .addFields(
         { name: '`+باند`', value: '**لتبنيد العضو من السيرفر**' },
         { name: '`+برا`', value: '**لطرد العضو من السيرفر**' },
+        { name: '`+تحذير`', value: '**إعطاء تحذير لعضو وإرساله بالخاص**' },
         { name: '`+اخفاء`', value: '**لإخفاء الروم عن الأعضاء**' },
         { name: '`+ظهور`', value: '**لإظهار الروم للأعضاء**' },
         { name: '`+رول`', value: '**إعطاء رتبة لعضو محدد**' },
         { name: '`+شيل`', value: '**إزالة رتبة من عضو محدد**' },
-        { name: '`+العاب`', value: '**لألعاب عشوائية ممتعة**' },
-        { name: '`+afk`', value: '**لتفعيل وضع الانشغال والابتعاد**' },
-        { name: '`+ستريك`', value: `**عرض عدد أيام الستريك المتتالية (🔥${currentStreak})**` }
+        { name: '`+العاب`', value: '**لألعاب عشوائية ممتعة**' }
       );
 
     const page2 = new EmbedBuilder()
@@ -109,7 +131,7 @@ client.on('messageCreate', async message => {
       .setDescription('جميع الأوامر تبدأ بعلامة `+`')
       .setColor(0x3498DB)
       .addFields(
-        { name: '`+نك`', value: '**تغيير النك نيم، أو كتابة المنشن فقط لإعادة تعيين الاسم**' },
+        { name: '`+نك`', value: '**تغيير النك نيم، أو كتابة المنشن فقط لإعادة التعيين**' },
         { name: '`+مسح` أو `+مسح [العدد]`', value: '**لمسح وحذف الرسائل**' },
         { name: '`+جيفوايات`', value: '**لإنشاء مسابقة جيفواي عادية**' },
         { name: '`+امبيد`', value: '**لإرسال رسالة بتصميم الامبيد**' },
@@ -120,13 +142,15 @@ client.on('messageCreate', async message => {
 
     const page3 = new EmbedBuilder()
       .setTitle('📜 قائمة أوامر البوت (الصفحة 3/3)')
-      .setDescription('جميع الأوامر تبدأ بعلامة `+`')
+      .setDescription('جميع الأوامر تبدأ بعلامة `+` (أوامر النظام والتحكم)')
       .setColor(0x3498DB)
       .addFields(
         { name: '`+راتبي`', value: '**عرض معلومات الراتب المطور وعدد رسائلك الباقية**' },
-        { name: '`+user`', value: '**معرفة عمر الحساب وتاريخ انضمامه للسيرفر مع المنشن**' },
-        { name: '`+استدعاء`', value: '**منشن العضو لتنبيهه بخصوص معين**' },
-        { name: '`+رول-جماعي`', value: '**إعطاء رول لجميع أعضاء السيرفر**' }
+        { name: '`+user`', value: '**معرفة عمر الحساب وتاريخ انضمامه للسيرفر**' },
+        { name: '`+afk`', value: '**لتفعيل وضع الانشغال والابتعاد**' },
+        { name: '`+ستريك`', value: `**عرض عدد أيام الستريك المتتالية (🔥${currentStreak})**` },
+        { name: '`+ايقاف-السستم`', value: '**إيقاف السستم بالكامل (للأونر فقط)**' },
+        { name: '`+تشغيل-السستم`', value: '**تشغيل السستم مجدداً (للأونر فقط)**' }
       );
 
     const row = new ActionRowBuilder().addComponents(
@@ -164,6 +188,33 @@ client.on('messageCreate', async message => {
     return;
   }
 
+  if (command === 'تحذير' || command === 'warn') {
+    if (!isStaff) return sendError('هذا الأمر مخصص للإدارة فقط!');
+    const target = message.mentions.members.first();
+    if (!target) return sendError('اكتب هكذا: `+تحذير @العضو [السبب]`');
+    const reason = args.slice(1).join(' ') || 'بدون سبب محدد';
+
+    // حفظ التحذير في النظام
+    if (!warnings.has(target.id)) warnings.set(target.id, []);
+    const userWarns = warnings.get(target.id);
+    userWarns.push({ reason, moderator: message.author.tag, date: new Date().toLocaleString() });
+
+    // إرسال رسالة خاصة للعضو
+    const dmEmbed = new EmbedBuilder()
+      .setTitle('⚠️ تنبيه: لقد تلقيت تحذيراً جديداً')
+      .setColor(0xE74C3C)
+      .addFields(
+        { name: '🏛️ السيرفر', value: message.guild.name, inline: true },
+        { name: '🛡️ الإداري المسؤول', value: message.author.tag, inline: true },
+        { name: '📝 السبب', value: reason, inline: false },
+        { name: '📊 عدد تحذيراتك الحالية', value: `\`${userWarns.length}\` تحذيرات`, inline: false }
+      )
+      .setTimestamp();
+
+    await target.send({ embeds: [dmEmbed] }).catch(() => {});
+    return message.reply(`⚠️ **تم إعطاء تحذير للعضو ${target} بنجاح وإرساله بالخاص. (إجمالي التحذيرات: ${userWarns.length})**`);
+  }
+
   if (command === 'باند') {
     if (!isOwner && !message.member.permissions.has(PermissionFlagsBits.BanMembers)) return sendError('ليس لديك صلاحية لاستخدام هذا الأمر!');
     const target = message.mentions.members.first() || message.guild.members.cache.get(args[0]);
@@ -198,20 +249,18 @@ client.on('messageCreate', async message => {
     const newNick = args.slice(1).join(' ');
 
     if (!newNick) {
-      // ريست الاسم
       try {
         await target.setNickname(null);
         await message.reply(`🔄 **تم إعادة تعيين (ريست) النك نيم للعضو ${target} بنجاح!**`);
       } catch (e) {
-        sendError('لا يمكنني إعادة تعيين النك نيم لهذا العضو (رتبته أعلى من البوت أو رتبتك)!');
+        sendError('لا يمكنني إعادة تعيين النك نيم لهذا العضو!');
       }
     } else {
-      // تغيير الاسم
       try {
         await target.setNickname(newNick);
         await message.reply(`✅ **تم تغيير النك نيم للعضو ${target} بنجاح إلى: (${newNick})**`);
       } catch (e) {
-        sendError('لا يمكنني تغيير النك نيم لهذا العضو (رتبته أعلى من البوت أو رتبتك)!');
+        sendError('لا يمكنني تغيير النك نيم لهذا العضو!');
       }
     }
   }
@@ -329,18 +378,6 @@ client.on('messageCreate', async message => {
 
   if (command === 'ستريك') {
     return message.reply(`🔥 **لديك ستريك متواصل بعدد:** \`${currentStreak}\` **يوم! حافظ على استمرارك.**`).catch(() => {});
-  }
-
-  if (command === 'استدعاء') {
-    const target = message.mentions.members.first();
-    if (!target) return sendError('اكتب: `+استدعاء @العضو [السبب]`');
-    const reason = args.slice(1).join(' ') || 'لا يوجد سبب محدد';
-    try {
-      await target.send(`🚨 **تم استدعاؤك في سيرفر (${message.guild.name}) بواسطة ${message.author}**\n📌 **السبب:** ${reason}\n📍 **الروم:** ${message.channel}`).catch(() => {});
-      await message.reply(`✅ **تم إرسال تنبيه الاستدعاء إلى العضو ${target} بنجاح.**`);
-    } catch (e) {
-      sendError('تعذر إرسال رسالة خاصة للعضو.');
-    }
   }
 
   if (command === 'مسح') {
@@ -463,29 +500,6 @@ client.on('messageCreate', async message => {
       await message.reply(`🔓 **تم فك التايم آوت عن العضو ${target} بنجاح.**`);
     } catch (e) {
       sendError('فشل فك التايم عن هذا العضو.');
-    }
-  }
-
-  if (command === 'رول-جماعي' || command === 'اعطاء-رول-للكل') {
-    if (!isOwner) return sendError('هذا الأمر مخصص لأونر السيرفر فقط!');
-    const roleArg = args.join(' ').replace(/[<@&>]/g, '');
-    const role = message.guild.roles.cache.get(roleArg) || message.guild.roles.cache.find(r => r.name.toLowerCase().includes(roleArg.toLowerCase()));
-    if (!role) return sendError('اكتب اسم الرول أو الآيدي بشكل صحيح: `+رول-جماعي اسم_الرول`');
-
-    await message.reply('⏳ **جاري إعطاء الرول لجميع أعضاء السيرفر...**').catch(() => {});
-    
-    try {
-      const members = await message.guild.members.fetch();
-      let count = 0;
-      members.forEach(async member => {
-        if (!member.user.bot && !member.roles.cache.has(role.id)) {
-          await member.roles.add(role).catch(() => {});
-          count++;
-        }
-      });
-      await message.channel.send(`✅ **تم الانتهاء! تمت إضافة الرول (${role.name}) لـ (${count}) عضو بنجاح.**`).catch(() => {});
-    } catch (e) {
-      sendError('حدث خطأ أثناء إعطاء الرولات للكل.');
     }
   }
 });
