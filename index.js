@@ -18,9 +18,19 @@ const streaks = new Map();
 const messageCounts = new Map();
 const warnings = new Map(); // تخزين التحذيرات
 let isSystemActive = true; // حالة السستم (مفعل افتراضياً)
+let greetChannelId = null; // روم الترحيب لأمر +greet
 
 client.once('ready', async () => {
   console.log(`🚀 تم تشغيل البوت بنجاح: ${client.user.tag}`);
+});
+
+// حدث دخول عضو جديد للسيرفر لتنفيذ أمر +greet
+client.on('guildMemberAdd', member => {
+  if (!greetChannelId) return;
+  const channel = member.guild.channels.cache.get(greetChannelId);
+  if (channel) {
+    channel.send(`🎉 أهلاً بك يا ${member} في السيرفر منورنا!`).catch(() => {});
+  }
 });
 
 client.on('messageCreate', async message => {
@@ -116,14 +126,10 @@ client.on('messageCreate', async message => {
       .setDescription('جميع الأوامر تبدأ بعلامة `+`')
       .setColor(0x3498DB)
       .addFields(
-        { name: '`+باند`', value: '**لتبنيد العضو من السيرفر**' },
-        { name: '`+برا`', value: '**لطرد العضو من السيرفر**' },
-        { name: '`+تحذير`', value: '**إعطاء تحذير لعضو وإرساله بالخاص**' },
-        { name: '`+اخفاء`', value: '**لإخفاء الروم عن الأعضاء**' },
-        { name: '`+ظهور`', value: '**لإظهار الروم للأعضاء**' },
-        { name: '`+رول`', value: '**إعطاء رتبة لعضو محدد**' },
-        { name: '`+شيل`', value: '**إزالة رتبة من عضو محدد**' },
-        { name: '`+العاب`', value: '**لألعاب عشوائية ممتعة**' }
+        { name: '`+العاب`', value: '**لألعاب عشوائية ممتعة**' },
+        { name: '`+afk`', value: '**لتفعيل وضع الانشغال والابتعاد**' },
+        { name: '`+ستريك`', value: `**عرض عدد أيام الستريك المتتالية (🔥${currentStreak})**` },
+        { name: '`+user`', value: '**معرفة عمر الحساب وتاريخ انضمامه للسيرفر**' }
       );
 
     const page2 = new EmbedBuilder()
@@ -131,26 +137,28 @@ client.on('messageCreate', async message => {
       .setDescription('جميع الأوامر تبدأ بعلامة `+`')
       .setColor(0x3498DB)
       .addFields(
+        { name: '`+راتبي`', value: '**عرض معلومات الراتب المطور وعدد رسائلك الباقية**' },
         { name: '`+نك`', value: '**تغيير النك نيم، أو كتابة المنشن فقط لإعادة التعيين**' },
         { name: '`+مسح` أو `+مسح [العدد]`', value: '**لمسح وحذف الرسائل**' },
         { name: '`+جيفوايات`', value: '**لإنشاء مسابقة جيفواي عادية**' },
         { name: '`+امبيد`', value: '**لإرسال رسالة بتصميم الامبيد**' },
-        { name: '`+say`', value: '**جعل البوت يكرر كلامك**' },
-        { name: '`+تايم`', value: '**إعطاء ميوت مؤقت (تايم آوت)**' },
-        { name: '`+انتايم`', value: '**فك التايم آوت عن العضو**' }
+        { name: '`+say`', value: '**جعل البوت يكرر كلامك**' }
       );
 
     const page3 = new EmbedBuilder()
       .setTitle('📜 قائمة أوامر البوت (الصفحة 3/3)')
-      .setDescription('جميع الأوامر تبدأ بعلامة `+` (أوامر النظام والتحكم)')
+      .setDescription('جميع الأوامر تبدأ بعلامة `+` (أوامر الإدارة والنظام)')
       .setColor(0x3498DB)
       .addFields(
-        { name: '`+راتبي`', value: '**عرض معلومات الراتب المطور وعدد رسائلك الباقية**' },
-        { name: '`+user`', value: '**معرفة عمر الحساب وتاريخ انضمامه للسيرفر**' },
-        { name: '`+afk`', value: '**لتفعيل وضع الانشغال والابتعاد**' },
-        { name: '`+ستريك`', value: `**عرض عدد أيام الستريك المتتالية (🔥${currentStreak})**` },
-        { name: '`+ايقاف-السستم`', value: '**إيقاف السستم بالكامل (للأونر فقط)**' },
-        { name: '`+تشغيل-السستم`', value: '**تشغيل السستم مجدداً (للأونر فقط)**' }
+        { name: '`+قفل`', value: '**قفل الشات الحالي منعاً لإرسال الرسائل**' },
+        { name: '`+فتح`', value: '**فتح الشات وإعادة الكتابة فيه**' },
+        { name: '`+تحذير`', value: '**إعطاء تحذير لعضو وإرساله بالخاص**' },
+        { name: '`+باند`', value: '**لتبنيد العضو من السيرفر**' },
+        { name: '`+برا`', value: '**لطرد العضو من السيرفر**' },
+        { name: '`+تايم` / `+انتايم`', value: '**إعطاء أو فك الميوت المؤقت**' },
+        { name: '`+اخفاء` / `+ظهور`', value: '**لإخفاء أو إظهار الروم**' },
+        { name: '`+greet`', value: '**تحديد روم الحالية لتفعيل الترحيب بالأعضاء الجدد**' },
+        { name: '`+ايقاف-السستم` / `+تشغيل-السستم`', value: '**التحكم بتمكين أو إيقاف البوت (للأونر)**' }
       );
 
     const row = new ActionRowBuilder().addComponents(
@@ -188,18 +196,42 @@ client.on('messageCreate', async message => {
     return;
   }
 
+  if (command === 'قفل' || command === 'lock') {
+    if (!isOwner && !message.member.permissions.has(PermissionFlagsBits.ManageChannels)) return sendError('ليس لديك صلاحية لقفل الشات!');
+    try {
+      await message.channel.permissionOverwrites.edit(message.guild.roles.everyone, { SendMessages: false });
+      return message.reply('🔒 **تم قفل الشات بنجاح.**').catch(() => {});
+    } catch (e) {
+      sendError('فشل قفل الشات.');
+    }
+  }
+
+  if (command === 'فتح' || command === 'unlock') {
+    if (!isOwner && !message.member.permissions.has(PermissionFlagsBits.ManageChannels)) return sendError('ليس لديك صلاحية لفتح الشات!');
+    try {
+      await message.channel.permissionOverwrites.edit(message.guild.roles.everyone, { SendMessages: true });
+      return message.reply('🔓 **تم فتح الشات بنجاح.**').catch(() => {});
+    } catch (e) {
+      sendError('فشل فتح الشات.');
+    }
+  }
+
+  if (command === 'greet') {
+    if (!isStaff) return sendError('هذا الأمر مخصص للإدارة فقط!');
+    greetChannelId = message.channel.id;
+    return message.reply(`✅ **تم تعيين هذه الروم بنجاح لروم الترحيب (+greet)! سيتم منشن الأعضاء الجدد هنا.**`).catch(() => {});
+  }
+
   if (command === 'تحذير' || command === 'warn') {
     if (!isStaff) return sendError('هذا الأمر مخصص للإدارة فقط!');
     const target = message.mentions.members.first();
     if (!target) return sendError('اكتب هكذا: `+تحذير @العضو [السبب]`');
     const reason = args.slice(1).join(' ') || 'بدون سبب محدد';
 
-    // حفظ التحذير في النظام
     if (!warnings.has(target.id)) warnings.set(target.id, []);
     const userWarns = warnings.get(target.id);
     userWarns.push({ reason, moderator: message.author.tag, date: new Date().toLocaleString() });
 
-    // إرسال رسالة خاصة للعضو
     const dmEmbed = new EmbedBuilder()
       .setTitle('⚠️ تنبيه: لقد تلقيت تحذيراً جديداً')
       .setColor(0xE74C3C)
@@ -323,36 +355,6 @@ client.on('messageCreate', async message => {
       await message.reply('🐵 **تم إظهار الروم بنجاح.**');
     } catch (e) {
       sendError('فشل إظهار الروم.');
-    }
-  }
-
-  if (command === 'رول') {
-    if (!isOwner) return sendError('هذا الأمر مخصص للإدارة فقط!');
-    const targetMember = message.mentions.members.first();
-    const roleArg = args.slice(1).join(' ').replace(/[<@&>]/g, '');
-    const role = message.guild.roles.cache.get(roleArg) || message.guild.roles.cache.find(r => r.name.toLowerCase().includes(roleArg.toLowerCase()));
-    if (!targetMember || !role) return sendError('اكتب بشكل صحيح: `+رول @العضو اسم_الرول`');
-
-    try {
-      await targetMember.roles.add(role);
-      await message.reply(`✅ **تم إعطاء رول (${role.name}) للعضو ${targetMember}.**`);
-    } catch (e) {
-      sendError('رتبة البوت أدنى من الرتبة المراد إعطاؤها!');
-    }
-  }
-
-  if (command === 'شيل') {
-    if (!isOwner) return sendError('هذا الأمر مخصص للإدارة فقط!');
-    const targetMember = message.mentions.members.first();
-    const roleArg = args.slice(1).join(' ').replace(/[<@&>]/g, '');
-    const role = message.guild.roles.cache.get(roleArg) || message.guild.roles.cache.find(r => r.name.toLowerCase().includes(roleArg.toLowerCase()));
-    if (!targetMember || !role) return sendError('اكتب بشكل صحيح: `+شيل @العضو اسم_الرول`');
-
-    try {
-      await targetMember.roles.remove(role);
-      await message.reply(`🗑️ **تم إزالة رول (${role.name}) من العضو ${targetMember}.**`);
-    } catch (e) {
-      sendError('رتبة البوت أدنى من الرتبة المراد إزالتها!');
     }
   }
 
