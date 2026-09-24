@@ -9,6 +9,26 @@ const client = new Client({
   ]
 });
 
+// قاعدة بيانات مصغرة في الذاكرة لتخزين أرصدة الروبكس
+const balances = new Map();
+
+function getBalance(userId) {
+  return balances.get(userId) || 0;
+}
+
+function addBalance(userId, amount) {
+  const current = getBalance(userId);
+  balances.set(userId, current + amount);
+  return balances.get(userId);
+}
+
+function takeBalance(userId, amount) {
+  const current = getBalance(userId);
+  const newBal = Math.max(0, current - amount);
+  balances.set(userId, newBal);
+  return newBal;
+}
+
 // 2. قائمة جوائز صندوق الحظ
 const boxItems = [
   {
@@ -55,8 +75,9 @@ function createBoxEmbed(user) {
     .setTimestamp();
 }
 
-// 3. تسجيل أوامر السلاش (/box و /ban) عند التشغيل
-client.once('ready', async () => {console.log(`✅ البوت شغال بنجاح باسم: ${client.user.tag}`);
+// 3. تسجيل أوامر السلاش عند التشغيل
+client.once('ready', async () => {
+  console.log(`✅ البوت شغال بنجاح باسم: ${client.user.tag}`);
 
   const commands = [
     new SlashCommandBuilder()
@@ -66,7 +87,17 @@ client.once('ready', async () => {console.log(`✅ البوت شغال بنجا�
       .setName('ban')
       .setDescription('حظر عضو من السيرفر')
       .addUserOption(option => option.setName('target').setDescription('العضو المراد حظره').setRequired(true))
-      .addStringOption(option => option.setName('reason').setDescription('سبب الحظر'))
+      .addStringOption(option => option.setName('reason').setDescription('سبب الحظر')),
+    new SlashCommandBuilder()
+      .setName('lock')
+      .setDescription('قفل الروم الحالي عن الكتابة'),
+    new SlashCommandBuilder()
+      .setName('unlock')
+      .setDescription('فتح الروم الحالي للكتابة'),
+    new SlashCommandBuilder()
+      .setName('bal')
+      .setDescription('عرض محفظتك وكم لديك من الروبكس')
+      .addUserOption(option => option.setName('target').setDescription('عرض محفظة شخص معين'))
   ];
 
   const rest = new REST({ version: '10' }).setToken(process.env.DISCORD_TOKEN);
@@ -76,13 +107,13 @@ client.once('ready', async () => {console.log(`✅ البوت شغال بنجا�
       Routes.applicationCommands(client.user.id),
       { body: commands }
     );
-    console.log('✅ تم تسجيل الأوامر بنجاح!');
+    console.log('✅ تم تسجيل جميع أوامر السلاش بنجاح!');
   } catch (error) {
     console.error('❌ خطأ في تسجيل الأوامر:', error);
   }
 });
 
-// 4. الاستجابة لأوامر السلاش (/box و /ban)
+// 4. الاستجابة لأوامر السلاش
 client.on('interactionCreate', async interaction => {
   if (!interaction.isChatInputCommand()) return;
 
@@ -95,12 +126,10 @@ client.on('interactionCreate', async interaction => {
     if (!interaction.member.permissions.has(PermissionFlagsBits.BanMembers)) {
       return interaction.reply({ content: '❌ ليس لديك صلاحية حظر الأعضاء!', ephemeral: true });
     }
-
     const target = interaction.options.getMember('target');
     const reason = interaction.options.getString('reason') || 'لم يتم تحديد سبب';
-
-    if (!target) return interaction.reply({ content: '❌ العضو غير موجود في السيرفر!', ephemeral: true });
-    if (!target.bannable) return interaction.reply({ content: '❌ لا يمكنني حظر هذا العضو (رتبته أعلى مني أو لا أملك صلاحيات كافية)!', ephemeral: true });
+    if (!target) return interaction.reply({ content: '❌ العضو غير موجود!', ephemeral: true });
+    if (!target.bannable) return interaction.reply({ content: '❌ لا يمكنني حظر هذا العضو!', ephemeral: true });
 
     try {
       await target.ban({ reason });
@@ -115,14 +144,63 @@ client.on('interactionCreate', async interaction => {
       await interaction.reply({ content: '❌ حدث خطأ أثناء تنفيذ الحظر!', ephemeral: true });
     }
   }
+
+  if (interaction.commandName === 'lock') {
+    if (!interaction.member.permissions.has(PermissionFlagsBits.ManageChannels)) {
+      return interaction.reply({ content: '❌ ليس لديك صلاحية إدارة القنوات!', ephemeral: true });
+    }
+    try {
+      await interaction.channel.permissionOverwrites.edit(interaction.guild.roles.everyone, { SendMessages: false });
+      const lockEmbed = new EmbedBuilder()
+        .setTitle('🔒 تم قفل الروم بنجاح!')
+        .setDescription(`تم قفل الروم **${interaction.channel.name}**.\n• **بواسطة:** ${interaction.user}`)
+        .setColor(0xE74C3C)
+        .setTimestamp();
+      await interaction.reply({ embeds: [lockEmbed] });
+    } catch (error) {
+      console.error(error);
+      await interaction.reply({ content: '❌ حدث خطأ أثناء قفل الروم!', ephemeral: true });
+    }
+  }
+
+  if (interaction.commandName === 'unlock') {
+    if (!interaction.member.permissions.has(PermissionFlagsBits.ManageChannels)) {
+      return interaction.reply({ content: '❌ ليس لديك صلاحية إدارة القنوات!', ephemeral: true });
+    }
+    try {
+      await interaction.channel.permissionOverwrites.edit(interaction.guild.roles.everyone, { SendMessages: true });
+      const unlockEmbed = new EmbedBuilder()
+        .setTitle('🔓 تم فتح الروم بنجاح!')
+        .setDescription(`تم فتح الروم **${interaction.channel.name}**.\n• **بواسطة:** ${interaction.user}`)
+        .setColor(0x2ECC71)
+        .setTimestamp();
+      await interaction.reply({ embeds: [unlockEmbed] });
+    } catch (error) {
+      console.error(error);
+      await interaction.reply({ content: '❌ حدث خطأ أثناء فتح الروم!', ephemeral: true });
+    }
+  }
+
+  if (interaction.commandName === 'bal') {
+    const targetUser = interaction.options.getUser('target') || interaction.user;
+    const userBal = getBalance(targetUser.id);
+    const balEmbed = new EmbedBuilder()
+      .setTitle('💳 محفظة الروبكس (Robux)')
+      .setDescription(`صاحب المحفظة: **${targetUser.username}**\n\n### 🪙 الرصيد الحالي:\n> **${userBal.toLocaleString()} R$** روبكس`)
+      .setColor(0x00FF88)
+      .setThumbnail(targetUser.displayAvatarURL({ dynamic: true }))
+      .setTimestamp();
+    await interaction.reply({ embeds: [balEmbed] });
+  }
 });
 
-// 5. الاستجابة للأوامر الكتابية (box أو !box) و أمر البان الاختصاري (تف)
+// 5. الاستجابة للأوامر النصية
 client.on('messageCreate', async message => {
   if (message.author.bot || !message.guild) return;
 
-  const args = message.content.trim().split(/ +/);
-  const command = args.shift().toLowerCase();
+  const content = message.content.trim();
+  const args = content.split(/ +/);
+  const command = args[0].toLowerCase();
 
   // أمر الصندوق
   if (command === 'box' || command === '!box' || command === 'بوكس') {
@@ -130,40 +208,141 @@ client.on('messageCreate', async message => {
     return message.reply({ embeds: [embed] });
   }
 
-  // أمر البان بالاختصار (تف) أو (!ban أو بان)
+  // أمر البان السريع (تف)
   if (command === 'تف' || command === '!ban' || command === 'بان') {
-    // التأكد من صلاحية الشخص
     if (!message.member.permissions.has(PermissionFlagsBits.BanMembers)) {
       return message.reply('❌ ليس لديك صلاحية حظر الأعضاء (`BAN_MEMBERS`)!');
     }
 
-    // تحديد العضو المراد حظره (عبر المنشن أو الـ ID)
-    const target = message.mentions.members.first() || await message.guild.members.fetch(args[0]).catch(() => null);
+    // جلب المنشن مباشرة من الـ cache أو المعرف لتفادي التأخير والبطء
+    const target = message.mentions.members.first() || (args[1] ? message.guild.members.cache.get(args[1].replace(/[<@!>]/g, '')) : null);
 
-    if (!target) {
-      return message.reply('❌ يرجى تحديد العضو المطلوب حظره! مثال:\n`تف @user السبب`');
-    }
-
+    if (!target) return message.reply('❌ يرجى منشن العضو المطلوب حظره! مثال: `تف @العضو`');
     if (target.id === message.author.id) return message.reply('❌ لا يمكنك حظر نفسك!');
     if (target.id === client.user.id) return message.reply('❌ لا يمكنك حظري!');
-    if (!target.bannable) return message.reply('❌ لا أستطيع حظر هذا العضو! قد تكون رتبته أعلى مني.');
+    if (!target.bannable) return message.reply('❌ لا أستطيع حظر هذا العضو (رتبته أعلى مني أو هو أدمن)!');
 
-    const reason = args.slice(1).join(' ') || 'لم يتم تحديد سبب';
-
+    const reason = args.slice(2).join(' ') || 'لم يتم تحديد سبب';
     try {
       await target.ban({ reason });
       const banEmbed = new EmbedBuilder()
         .setTitle('🔨 تم حظر العضو بنجاح!')
-        .setDescription(`• **العضو المحظور:** ${target.user.tag}\n• **بواسطة:** ${message.author}\n• **السبب:** ${reason}`).setColor(0xFF0000)
+        .setDescription(`• **العضو المحظور:** ${target.user.tag}\n• **بواسطة:** ${message.author}\n• **السبب:** ${reason}`)
+        .setColor(0xFF0000)
         .setTimestamp();
-
       await message.reply({ embeds: [banEmbed] });
     } catch (error) {
       console.error(error);
       message.reply('❌ حدث خطأ أثناء محاولة حظر العضو!');
     }
   }
+
+  // أمر قفل الشات
+  if (command === 'قفل' || command === 'lock' || command === '!lock') {
+    if (!message.member.permissions.has(PermissionFlagsBits.ManageChannels)) {
+      return message.reply('❌ ليس لديك صلاحية إدارة القنوات!');
+    }
+    try {
+      await message.channel.permissionOverwrites.edit(message.guild.roles.everyone, { SendMessages: false });
+      const lockEmbed = new EmbedBuilder()
+        .setTitle('🔒 تم قفل الروم بنجاح!')
+        .setDescription(`تم قفل الروم **${message.channel.name}**.\n• **بواسطة:** ${message.author}`)
+        .setColor(0xE74C3C)
+        .setTimestamp();
+      await message.reply({ embeds: [lockEmbed] });
+    } catch (error) {
+      console.error(error);
+      message.reply('❌ حدث خطأ أثناء قفل الروم!');
+    }
+  }
+
+  // أمر فتح الشات
+  if (command === '+فتح' || command === 'فتح' || command === 'unlock' || command === '!unlock') {
+    if (!message.member.permissions.has(PermissionFlagsBits.ManageChannels)) {
+      return message.reply('❌ ليس لديك صلاحية إدارة القنوات!');
+    }
+    try {
+      await message.channel.permissionOverwrites.edit(message.guild.roles.everyone, { SendMessages: true });
+      const unlockEmbed = new EmbedBuilder()
+        .setTitle('🔓 تم فتح الروم بنجاح!')
+        .setDescription(`تم فتح الروم **${message.channel.name}**.\n• **بواسطة:** ${message.author}`)
+        .setColor(0x2ECC71)
+        .setTimestamp();
+      await message.reply({ embeds: [unlockEmbed] });
+    } catch (error) {
+      console.error(error);
+      message.reply('❌ حدث خطأ أثناء فتح الروم!');
+    }
+  }
+
+  // --- 💳 نظام المحفظة والأرصدة (Robux) ---
+
+  // أمر الرصيد !bal أو رصيدي
+  if (command === '!bal' || command === 'رصيدي' || command === 'محفظتي') {
+    const targetMember = message.mentions.members.first() || message.member;
+    const userBal = getBalance(targetMember.id);
+
+    const balEmbed = new EmbedBuilder()
+      .setTitle('💳 محفظة الروبكس (Robux)')
+      .setDescription(`صاحب المحفظة: ${targetMember}\n\n### 🪙 الرصيد الحالي:\n> **${userBal.toLocaleString()} R$** روبكس`)
+      .setColor(0x00FF88)
+      .setThumbnail(targetMember.user.displayAvatarURL({ dynamic: true }))
+      .setFooter({ text: 'نظام إدارة الأرصدة والمحفظة' })
+      .setTimestamp();
+
+    return message.reply({ embeds: [balEmbed] });
+  }
+
+  // أمر إضافة الروبكس (+add @منشن الرقم أو اضف @منشن الرقم)
+  if (command === '+add' || command === 'اضف') {
+    if (!message.member.permissions.has(PermissionFlagsBits.Administrator) && !message.member.permissions.has(PermissionFlagsBits.ManageGuild)) {
+      return message.reply('❌ ليس لديك صلاحية إضافة روبكس للإداريين!');
+    }
+
+    const targetMember = message.mentions.members.first();
+    const amount = parseInt(args.find(arg => !isNaN(arg) && !arg.includes('<@')));
+
+    if (!targetMember || isNaN(amount) || amount <= 0) {
+      return message.reply('❌ طريقة الاستخدام الخاطئة! الطريقة الصحيحة:\n`+add @العضو 100`');
+    }
+
+    const newBalance = addBalance(targetMember.id, amount);
+
+    const addEmbed = new EmbedBuilder()
+      .setTitle('✅ تم إضافة الروبكس بنجاح!')
+      .setDescription(`• **العضو المستلم:** ${targetMember}\n• **المبلغ المضاف:** \`+${amount.toLocaleString()} R$\` روبكس\n• **بواسطة الإداري:** ${message.author}\n\n### 💳 الرصيد الجديد بالمحفظة:\n> **${newBalance.toLocaleString()} R$** روبكس`)
+      .setColor(0x2ECC71)
+      .setThumbnail(targetMember.user.displayAvatarURL({ dynamic: true }))
+      .setTimestamp();
+
+    return message.reply({ embeds: [addEmbed] });
+  }
+
+  // أمر سحب الروبكس ($take @منشن الرقم أو سحب @منشن الرقم)
+  if (command === '$take' || command === 'سحب') {
+    if (!message.member.permissions.has(PermissionFlagsBits.Administrator) && !message.member.permissions.has(PermissionFlagsBits.ManageGuild)) {
+      return message.reply('❌ ليس لديك صلاحية سحب الروبكس!');
+    }
+
+    const targetMember = message.mentions.members.first();
+    const amount = parseInt(args.find(arg => !isNaN(arg) && !arg.includes('<@')));
+
+    if (!targetMember || isNaN(amount) || amount <= 0) {
+      return message.reply('❌ طريقة الاستخدام الخاطئة! الطريقة الصحيحة:\n`$take @العضو 50`');
+    }
+
+    const newBalance = takeBalance(targetMember.id, amount);
+
+    const takeEmbed = new EmbedBuilder()
+      .setTitle('💸 تم سحب الروبكس بنجاح!')
+      .setDescription(`• **العضو:** ${targetMember}\n• **المبلغ المسحوب:** \`-${amount.toLocaleString()} R$\` روبكس\n• **بواسطة الإداري:** ${message.author}\n\n### 💳 الرصيد المتبقي بالمحفظة:\n> **${newBalance.toLocaleString()} R$** روبكس`)
+      .setColor(0xE74C3C)
+      .setThumbnail(targetMember.user.displayAvatarURL({ dynamic: true }))
+      .setTimestamp();
+
+    return message.reply({ embeds: [takeEmbed] });
+  }
 });
 
 // 6. تشغيل البوت
-client.login(process.env.DIوSCORD_TOKEN);
+client.login(process.env.DISCORD_TOKEN);
