@@ -15,16 +15,15 @@ const TARGET_MESSAGES_FOR_SALARY = 500; // الهدف للراتب
 
 const afkUsers = new Map();
 const streaks = new Map();
-const messageCounts = new Map();
-const warnings = new Map(); // تخزين التحذيرات
-let isSystemActive = true; // حالة السستم (مفعل افتراضياً)
-let greetChannelId = null; // روم الترحيب لأمر +greet
+const messageCounts = new Map(); 
+const warnings = new Map(); 
+let isSystemActive = true; 
+let greetChannelId = null; 
 
 client.once('ready', async () => {
   console.log(`🚀 تم تشغيل البوت بنجاح: ${client.user.tag}`);
 });
 
-// حدث دخول عضو جديد للسيرفر لتنفيذ أمر +greet
 client.on('guildMemberAdd', member => {
   if (!greetChannelId) return;
   const channel = member.guild.channels.cache.get(greetChannelId);
@@ -36,7 +35,6 @@ client.on('guildMemberAdd', member => {
 client.on('messageCreate', async message => {
   if (message.author.bot || !message.guild) return;
 
-  // التحقق من حالة إيقاف السستم (فقط الأونر يمكنه استخدام أمر التشغيل)
   if (!isSystemActive) {
     if (message.content.trim() === '+تشغيل-السستم') {
       if (message.author.id !== message.guild.ownerId && !OWNER_ROLES.includes(message.author.id)) {
@@ -45,10 +43,9 @@ client.on('messageCreate', async message => {
       isSystemActive = true;
       return message.reply('🟢 **تم تشغيل السستم بنجاح ويعمل البوت الآن بشكل طبيعي!**').catch(() => {});
     }
-    return; // السستم متوقف، تجاهل باقي الرسائل والأوامر
+    return;
   }
 
-  // أمر إيقاف السستم (حصري لصاحب السيرفر)
   if (message.content.trim() === '+ايقاف-السستم') {
     if (message.author.id !== message.guild.ownerId && !OWNER_ROLES.includes(message.author.id)) {
       return message.reply('❌ **هذا الأمر مخصص لصاحب السيرفر فقط!**').catch(() => {});
@@ -120,21 +117,90 @@ client.on('messageCreate', async message => {
     isStaff = false;
   }
 
+  if (command === 'roles') {
+    try {
+      const rolesSorted = message.guild.roles.cache
+        .filter(r => r.id !== message.guild.id)
+        .sort((a, b) => b.position - a.position);
+
+      const embed = new EmbedBuilder()
+        .setTitle(`🛡️ رولات سيرفر ${message.guild.name} (من الأقوى للأصغر)`)
+        .setDescription(rolesSorted.map(r => `• ${r}`).join('\n') || 'لا توجد رولات')
+        .setColor(0x3498DB)
+        .setFooter({ text: `إجمالي الرولات: ${rolesSorted.size}` })
+        .setTimestamp();
+
+      return message.reply({ embeds: [embed] }).catch(() => {});
+    } catch (e) {
+      return sendError('حدث خطأ أثناء جلب رولات السيرفر.');
+    }
+  }
+
+  if (command === 'توب-كتابي' || command === 'top-chat') {
+    const sortedUsers = Array.from(messageCounts.entries())
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 10);
+
+    let description = '';
+    if (sortedUsers.length === 0) {
+      description = '❌ **لا توجد بيانات تفاعل كتابي حتى الآن اليوم!**';
+    } else {
+      sortedUsers.forEach(([userId, count], index) => {
+        const medal = index === 0 ? '🥇' : index === 1 ? '🥈' : index === 2 ? '🥉' : `🔹 \`${index + 1}\``;
+        description += `${medal} <@${userId}> — **${count}** رسالة\n`;
+      });
+    }
+
+    const embed = new EmbedBuilder()
+      .setTitle('🏆 توب النشاط الكتابي اليومي (أعلى 10 أعضاء)')
+      .setDescription(description)
+      .setColor(0xF1C40F)
+      .setFooter({ text: `طلب بواسطة ${message.author.tag}` })
+      .setTimestamp();
+
+    return message.reply({ embeds: [embed] }).catch(() => {});
+  }
+
+  if (command === 'top' || command === 'رتبتي') {
+    const target = message.mentions.members.first() || message.member;
+    const count = messageCounts.get(target.id) || 0;
+    const xp = Math.floor(count / 20);
+
+    const embed = new EmbedBuilder()
+      .setTitle(`📊 نظام النقاط والرسائل للعضو: ${target.user.username}`)
+      .setThumbnail(target.user.displayAvatarURL({ dynamic: true }))
+      .setColor(0x2ECC71)
+      .addFields(
+        { name: '💬 عدد الرسائل المكتوبة', value: `\`${count}\` رسالة`, inline: true },
+        { name: '✨ النقاط المحسوبة (XP)', value: `\`${xp}\` XP`, inline: true },
+        { name: '💡 معلومة النظام', value: 'كل **20 رسالة** تخولك الحصول على **1xp** كتابي تلقائياً!', inline: false }
+      )
+      .setTimestamp();
+
+    return message.reply({ embeds: [embed] }).catch(() => {});
+  }
+
   if (command === 'help' || command === 'اوامر') {
+    // قائمة الأوامر الكلية المحسوبة تلقائياً
+    const totalCommands = 23;
+
     const page1 = new EmbedBuilder()
       .setTitle('📜 قائمة أوامر البوت (الصفحة 1/3)')
-      .setDescription('جميع الأوامر تبدأ بعلامة `+`')
+      .setDescription(`جميع الأوامر تبدأ بعلامة \`+\`\n📊 **إجمالي عدد أوامر البوت:** \`${totalCommands} أمر\``)
       .setColor(0x3498DB)
       .addFields(
         { name: '`+العاب`', value: '**لألعاب عشوائية ممتعة**' },
         { name: '`+afk`', value: '**لتفعيل وضع الانشغال والابتعاد**' },
         { name: '`+ستريك`', value: `**عرض عدد أيام الستريك المتتالية (🔥${currentStreak})**` },
-        { name: '`+user`', value: '**معرفة عمر الحساب وتاريخ انضمامه للسيرفر**' }
+        { name: '`+user`', value: '**معرفة عمر الحساب وتاريخ انضمامه للسيرفر**' },
+        { name: '`+top` أو `+رتبتي`', value: '**عرض عدد رسائلك ونقاط الـ XP (كل 20 رسالة = 1xp)**' },
+        { name: '`+توب-كتابي`', value: '**عرض قائمة أعلى 10 أعضاء تفاعلاً بالكتابة اليوم**' },
+        { name: '`+roles`', value: '**عرض جميع رولات السيرفر من الأقوى للأصغر**' }
       );
 
     const page2 = new EmbedBuilder()
       .setTitle('📜 قائمة أوامر البوت (الصفحة 2/3)')
-      .setDescription('جميع الأوامر تبدأ بعلامة `+`')
+      .setDescription(`جميع الأوامر تبدأ بعلامة \`+\`\n📊 **إجمالي عدد أوامر البوت:** \`${totalCommands} أمر\``)
       .setColor(0x3498DB)
       .addFields(
         { name: '`+راتبي`', value: '**عرض معلومات الراتب المطور وعدد رسائلك الباقية**' },
@@ -147,7 +213,7 @@ client.on('messageCreate', async message => {
 
     const page3 = new EmbedBuilder()
       .setTitle('📜 قائمة أوامر البوت (الصفحة 3/3)')
-      .setDescription('جميع الأوامر تبدأ بعلامة `+` (أوامر الإدارة والنظام)')
+      .setDescription(`جميع الأوامر تبدأ بعلامة \`+\` (أوامر الإدارة والنظام)\n📊 **إجمالي عدد أوامر البوت:** \`${totalCommands} أمر\``)
       .setColor(0x3498DB)
       .addFields(
         { name: '`+قفل`', value: '**قفل الشات الحالي منعاً لإرسال الرسائل**' },
@@ -157,7 +223,7 @@ client.on('messageCreate', async message => {
         { name: '`+برا`', value: '**لطرد العضو من السيرفر**' },
         { name: '`+تايم` / `+انتايم`', value: '**إعطاء أو فك الميوت المؤقت**' },
         { name: '`+اخفاء` / `+ظهور`', value: '**لإخفاء أو إظهار الروم**' },
-        { name: '`+greet`', value: '**تحديد روم الحالية لتفعيل الترحيب بالأعضاء الجدد**' },
+        { name: '`+greet`', value: '**تحديد الروم الحالية لتفعيل الترحيب بالأعضاء الجدد**' },
         { name: '`+ايقاف-السستم` / `+تشغيل-السستم`', value: '**التحكم بتمكين أو إيقاف البوت (للأونر)**' }
       );
 
@@ -172,7 +238,6 @@ client.on('messageCreate', async message => {
     if (!sentMsg) return;
 
     const collector = sentMsg.createMessageComponentCollector({ time: 60000 });
-
     let currentPage = 1;
     const pages = [page1, page2, page3];
 
@@ -384,11 +449,11 @@ client.on('messageCreate', async message => {
 
   if (command === 'مسح') {
     if (!isOwner && !message.member.permissions.has(PermissionFlagsBits.ManageMessages)) return sendError('ليس لديك صلاحية مسح الرسائل!');
-    const count = parseInt(args[0]) || 10;
-    if (count <= 0 || count > 100) return sendError('يرجى كتابة عدد بين 1 و 100.');
+    const countDel = parseInt(args[0]) || 10;
+    if (countDel <= 0 || countDel > 100) return sendError('يرجى كتابة عدد بين 1 و 100.');
     try {
-      await message.channel.bulkDelete(count + 1, true);
-      const tempMsg = await message.channel.send(`🧹 **تم مسح \`${count}\` رسالة بنجاح.**`);
+      await message.channel.bulkDelete(countDel + 1, true);
+      const tempMsg = await message.channel.send(`🧹 **تم مسح \`${countDel}\` رسالة بنجاح.**`);
       setTimeout(() => tempMsg.delete().catch(() => {}), 3000);
     } catch (e) {
       sendError('لا يمكنني مسح الرسائل الأقدم من 14 يوماً.');
