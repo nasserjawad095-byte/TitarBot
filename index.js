@@ -11,6 +11,7 @@ const client = new Client({
 
 const OWNER_ROLES = ['1536796640399200447', '1539678217311617195'];
 const STAFF_ROLE_ID = '1530435760183054337';
+const TARGET_MESSAGES_FOR_SALARY = 500; // الهدف للراتب
 
 const afkUsers = new Map();
 const streaks = new Map();
@@ -64,7 +65,7 @@ client.on('messageCreate', async message => {
 
   const currentStreak = userStreak.count;
   const originalNickname = message.member.displayName.replace(/🔥\d+\s*/g, '').trim();
-  const desiredNickname = `🔥${currentStreak} ${originalNickname}`;
+  const desiredNickname = `🔥${currentStreak}${originalNickname}`;
   
   if (message.member.manageable && message.member.nickname !== desiredNickname) {
     message.member.setNickname(desiredNickname).catch(() => {});
@@ -88,7 +89,7 @@ client.on('messageCreate', async message => {
 
   if (command === 'help' || command === 'اوامر') {
     const page1 = new EmbedBuilder()
-      .setTitle('📜 قائمة أوامر البوت (الصفحة 1/2)')
+      .setTitle('📜 قائمة أوامر البوت (الصفحة 1/3)')
       .setDescription('جميع الأوامر تبدأ بعلامة `+`')
       .setColor(0x3498DB)
       .addFields(
@@ -100,27 +101,39 @@ client.on('messageCreate', async message => {
         { name: '`+شيل`', value: '**إزالة رتبة من عضو محدد**' },
         { name: '`+العاب`', value: '**لألعاب عشوائية ممتعة**' },
         { name: '`+afk`', value: '**لتفعيل وضع الانشغال والابتعاد**' },
-        { name: '`+ستريك`', value: `**عرض عدد أيام الستريك المتتالية (🔥${currentStreak})**` },
-        { name: '`+نك`', value: '**تغيير النك نيم لأي عضو مع المنشن**' }
+        { name: '`+ستريك`', value: `**عرض عدد أيام الستريك المتتالية (🔥${currentStreak})**` }
       );
 
     const page2 = new EmbedBuilder()
-      .setTitle('📜 قائمة أوامر البوت (الصفحة 2/2)')
+      .setTitle('📜 قائمة أوامر البوت (الصفحة 2/3)')
       .setDescription('جميع الأوامر تبدأ بعلامة `+`')
       .setColor(0x3498DB)
       .addFields(
+        { name: '`+نك`', value: '**تغيير النك نيم، أو كتابة المنشن فقط لإعادة تعيين الاسم**' },
         { name: '`+مسح` أو `+مسح [العدد]`', value: '**لمسح وحذف الرسائل**' },
         { name: '`+جيفوايات`', value: '**لإنشاء مسابقة جيفواي عادية**' },
         { name: '`+امبيد`', value: '**لإرسال رسالة بتصميم الامبيد**' },
         { name: '`+say`', value: '**جعل البوت يكرر كلامك**' },
         { name: '`+تايم`', value: '**إعطاء ميوت مؤقت (تايم آوت)**' },
-        { name: '`+انتايم`', value: '**فك التايم آوت عن العضو**' },
-        { name: '`+راتبي`', value: '**عرض الراتب اليومي وعدد الرسائل**' }
+        { name: '`+انتايم`', value: '**فك التايم آوت عن العضو**' }
+      );
+
+    const page3 = new EmbedBuilder()
+      .setTitle('📜 قائمة أوامر البوت (الصفحة 3/3)')
+      .setDescription('جميع الأوامر تبدأ بعلامة `+`')
+      .setColor(0x3498DB)
+      .addFields(
+        { name: '`+راتبي`', value: '**عرض معلومات الراتب المطور وعدد رسائلك الباقية**' },
+        { name: '`+user`', value: '**معرفة عمر الحساب وتاريخ انضمامه للسيرفر مع المنشن**' },
+        { name: '`+استدعاء`', value: '**منشن العضو لتنبيهه بخصوص معين**' },
+        { name: '`+رول-جماعي`', value: '**إعطاء رول لجميع أعضاء السيرفر**' }
       );
 
     const row = new ActionRowBuilder().addComponents(
-      new ButtonBuilder().setCustomId('prev_page').setLabel('السابق').setStyle(ButtonStyle.Secondary).setDisabled(true),
-      new ButtonBuilder().setCustomId('next_page').setLabel('التالي').setStyle(ButtonStyle.Secondary)
+      new ButtonBuilder().setCustomId('first_page').setLabel('⏮️ البداية').setStyle(ButtonStyle.Secondary).setDisabled(true),
+      new ButtonBuilder().setCustomId('prev_page').setLabel('◀️ السابق').setStyle(ButtonStyle.Secondary).setDisabled(true),
+      new ButtonBuilder().setCustomId('next_page').setLabel('التالي ▶️').setStyle(ButtonStyle.Secondary),
+      new ButtonBuilder().setCustomId('last_page').setLabel('النهاية ⏭️').setStyle(ButtonStyle.Secondary)
     );
 
     const sentMsg = await message.reply({ embeds: [page1], components: [row] }).catch(() => {});
@@ -128,22 +141,25 @@ client.on('messageCreate', async message => {
 
     const collector = sentMsg.createMessageComponentCollector({ time: 60000 });
 
+    let currentPage = 1;
+    const pages = [page1, page2, page3];
+
     collector.on('collect', async i => {
       if (i.user.id !== message.author.id) return i.reply({ content: '❌ هذه الأوامر ليست لك!', ephemeral: true }).catch(() => {});
 
-      if (i.customId === 'next_page') {
-        const newRow = new ActionRowBuilder().addComponents(
-          new ButtonBuilder().setCustomId('prev_page').setLabel('السابق').setStyle(ButtonStyle.Secondary).setDisabled(false),
-          new ButtonBuilder().setCustomId('next_page').setLabel('التالي').setStyle(ButtonStyle.Secondary).setDisabled(true)
-        );
-        await i.update({ embeds: [page2], components: [newRow] }).catch(() => {});
-      } else if (i.customId === 'prev_page') {
-        const newRow = new ActionRowBuilder().addComponents(
-          new ButtonBuilder().setCustomId('prev_page').setLabel('السابق').setStyle(ButtonStyle.Secondary).setDisabled(true),
-          new ButtonBuilder().setCustomId('next_page').setLabel('التالي').setStyle(ButtonStyle.Secondary).setDisabled(false)
-        );
-        await i.update({ embeds: [page1], components: [newRow] }).catch(() => {});
-      }
+      if (i.customId === 'next_page' && currentPage < 3) currentPage++;
+      else if (i.customId === 'prev_page' && currentPage > 1) currentPage--;
+      else if (i.customId === 'first_page') currentPage = 1;
+      else if (i.customId === 'last_page') currentPage = 3;
+
+      const updatedRow = new ActionRowBuilder().addComponents(
+        new ButtonBuilder().setCustomId('first_page').setLabel('⏮️ البداية').setStyle(ButtonStyle.Secondary).setDisabled(currentPage === 1),
+        new ButtonBuilder().setCustomId('prev_page').setLabel('◀️ السابق').setStyle(ButtonStyle.Secondary).setDisabled(currentPage === 1),
+        new ButtonBuilder().setCustomId('next_page').setLabel('التالي ▶️').setStyle(ButtonStyle.Secondary).setDisabled(currentPage === 3),
+        new ButtonBuilder().setCustomId('last_page').setLabel('النهاية ⏭️').setStyle(ButtonStyle.Secondary).setDisabled(currentPage === 3)
+      );
+
+      await i.update({ embeds: [pages[currentPage - 1]], components: [updatedRow] }).catch(() => {});
     });
     return;
   }
@@ -177,20 +193,68 @@ client.on('messageCreate', async message => {
   if (command === 'نك' || command === 'نيكنيم') {
     if (!isOwner && !message.member.permissions.has(PermissionFlagsBits.ManageNicknames)) return sendError('ليس لديك صلاحية لتغيير النك نيم!');
     const target = message.mentions.members.first();
+    if (!target) return sendError('اكتب هكذا: `+نك @العضو` لعمل ريست، أو `+نك @العضو الاسم_الجديد` للتغيير.');
+
     const newNick = args.slice(1).join(' ');
-    if (!target || !newNick) return sendError('اكتب هكذا: `+نك @العضو الاسم_الجديد`');
-    try {
-      await target.setNickname(newNick);
-      await message.reply(`✅ **تم تغيير النك نيم للعضو ${target} بنجاح إلى: (${newNick})**`);
-    } catch (e) {
-      sendError('لا يمكنني تغيير النك نيم لهذا العضو (رتبته أعلى من البوت أو رتبتك)!');
+
+    if (!newNick) {
+      // ريست الاسم
+      try {
+        await target.setNickname(null);
+        await message.reply(`🔄 **تم إعادة تعيين (ريست) النك نيم للعضو ${target} بنجاح!**`);
+      } catch (e) {
+        sendError('لا يمكنني إعادة تعيين النك نيم لهذا العضو (رتبته أعلى من البوت أو رتبتك)!');
+      }
+    } else {
+      // تغيير الاسم
+      try {
+        await target.setNickname(newNick);
+        await message.reply(`✅ **تم تغيير النك نيم للعضو ${target} بنجاح إلى: (${newNick})**`);
+      } catch (e) {
+        sendError('لا يمكنني تغيير النك نيم لهذا العضو (رتبته أعلى من البوت أو رتبتك)!');
+      }
     }
   }
 
   if (command === 'راتبي') {
     if (!isStaff) return message.reply('❌ **هذا الأمر مخصص للإداريين فقط!**').catch(() => {});
     const count = messageCounts.get(message.author.id) || 0;
-    return message.reply(`راتبك ( ليس محدداً بعد ) عدد الرسايل (${count})`).catch(() => {});
+    const remaining = TARGET_MESSAGES_FOR_SALARY - count;
+    const progress = Math.max(0, Math.min(TARGET_MESSAGES_FOR_SALARY, count));
+    const percentage = Math.floor((progress / TARGET_MESSAGES_FOR_SALARY) * 100);
+
+    const embed = new EmbedBuilder()
+      .setTitle('💰 تقرير راتبك الإداري')
+      .setColor(0x2ECC71)
+      .addFields(
+        { name: '📊 عدد رسائلك الحالية', value: `\`${count}\` رسالة`, inline: true },
+        { name: '🎯 المطلوب للراتب', value: `\`${TARGET_MESSAGES_FOR_SALARY}\` رسالة`, inline: true },
+        { name: '⏳ المتبقي للحصول على الراتب', value: remaining > 0 ? `\`${remaining}\` رسالة إضافية` : '✅ **لقد أكملت المطلوب وتستحق راتبك!**', inline: false },
+        { name: '📈 نسبة الإنجاز', value: `\`${percentage}%\``, inline: false }
+      )
+      .setTimestamp();
+
+    return message.reply({ embeds: [embed] }).catch(() => {});
+  }
+
+  if (command === 'user' || command === 'معلومات') {
+    const target = message.mentions.members.first() || message.member;
+    const user = target.user;
+
+    const createdAt = `<t:${Math.floor(user.createdTimestamp / 1000)}:R>`;
+    const joinedAt = target.joinedTimestamp ? `<t:${Math.floor(target.joinedTimestamp / 1000)}:R>` : 'غير معروف';
+
+    const embed = new EmbedBuilder()
+      .setTitle(`👤 معلومات العضو: ${user.tag}`)
+      .setThumbnail(user.displayAvatarURL({ dynamic: true }))
+      .setColor(0x9B59B6)
+      .addFields(
+        { name: '📅 عمر الحساب (تاريخ الإنشاء)', value: createdAt, inline: false },
+        { name: '📥 تاريخ الانضمام للسيرفر', value: joinedAt, inline: false }
+      )
+      .setTimestamp();
+
+    return message.reply({ embeds: [embed] }).catch(() => {});
   }
 
   if (command === 'اخفاء') {
