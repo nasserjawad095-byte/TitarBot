@@ -1,4 +1,4 @@
-const { Client, GatewayIntentBits, EmbedBuilder, PermissionFlagsBits, ActionRowBuilder, ButtonBuilder, ButtonStyle, ChannelType, ModalBuilder, TextInputBuilder, TextInputStyle } = require('discord.js');
+const { Client, GatewayIntentBits, EmbedBuilder, PermissionFlagsBits, ActionRowBuilder, ButtonBuilder, ButtonStyle } = require('discord.js');
 
 const client = new Client({
   intents: [
@@ -10,8 +10,6 @@ const client = new Client({
 });
 
 const OWNER_ROLES = ['1536796640399200447', '1539678217311617195'];
-const SUPPORT_ROLE_ID = '1536796640399200447';
-const TICKET_CHANNEL_ID = '1552755184814530600';
 const STAFF_ROLE_ID = '1530435760183054337';
 
 const afkUsers = new Map();
@@ -20,34 +18,6 @@ const messageCounts = new Map();
 
 client.once('ready', async () => {
   console.log(`🚀 تم تشغيل البوت بنجاح: ${client.user.tag}`);
-
-  try {
-    const channel = await client.channels.fetch(TICKET_CHANNEL_ID);
-    if (channel && channel.isTextBased()) {
-      const messages = await channel.messages.fetch({ limit: 10 });
-      const hasTicketMsg = messages.some(m => m.author.id === client.user.id && m.components.length > 0);
-
-      if (!hasTicketMsg) {
-        const embed = new EmbedBuilder()
-          .setTitle('🎫 نظام التذاكر والدعم الفني')
-          .setDescription('لفتح تذاكر الدعم الفني، الاستفسارات، أو إتمام عمليات الشراء، يرجى الضغط على الزر بالأسفل.')
-          .setColor(0x2B2D31)
-          .setTimestamp();
-
-        const row = new ActionRowBuilder().addComponents(
-          new ButtonBuilder()
-            .setCustomId('create_ticket')
-            .setLabel('فتح تكت جديدة')
-            .setStyle(ButtonStyle.Primary)
-            .setEmoji('🎫')
-        );
-
-        await channel.send({ embeds: [embed], components: [row] });
-      }
-    }
-  } catch (e) {
-    console.log('لم يتم العثور على روم التكت أو لا يمكن إرسال الرسالة فيها.');
-  }
 });
 
 client.on('messageCreate', async message => {
@@ -145,9 +115,7 @@ client.on('messageCreate', async message => {
         { name: '`+say`', value: '**جعل البوت يكرر كلامك**' },
         { name: '`+تايم`', value: '**إعطاء ميوت مؤقت (تايم آوت)**' },
         { name: '`+انتايم`', value: '**فك التايم آوت عن العضو**' },
-        { name: '`+راتبي`', value: '**عرض الراتب اليومي وعدد الرسائل**' },
-        { name: '`+close`', value: '**إغلاق وتغيير اسم التكت إلى closed**' },
-        { name: '`+delete`', value: '**حذف التكت الحالية (داخل التكتات فقط)**' }
+        { name: '`+راتبي`', value: '**عرض الراتب اليومي وعدد الرسائل**' }
       );
 
     const row = new ActionRowBuilder().addComponents(
@@ -454,167 +422,6 @@ client.on('messageCreate', async message => {
       await message.channel.send(`✅ **تم الانتهاء! تمت إضافة الرول (${role.name}) لـ (${count}) عضو بنجاح.**`).catch(() => {});
     } catch (e) {
       sendError('حدث خطأ أثناء إعطاء الرولات للكل.');
-    }
-  }
-
-  if (command === 'close') {
-    const isSupport = message.member.permissions.has(PermissionFlagsBits.Administrator) || message.member.roles.cache.some(r => OWNER_ROLES.includes(r.id) || r.id === SUPPORT_ROLE_ID);
-    if (!isSupport) return message.reply('❌ **هذا الأمر مخصص للدعم الفني والأونرية فقط!**').catch(() => {});
-    
-    if (!message.channel.name.startsWith('ticket-') && message.channel.name !== 'closed') {
-      return message.reply('❌ **هذا الأمر يُستخدم داخل التكتات فقط!**').catch(() => {});
-    }
-
-    try {
-      await message.channel.setName('closed');
-      await message.channel.send('🔒 **تم إغلاق التكت وتغيير اسم الروم إلى closed.**').catch(() => {});
-    } catch (e) {
-      message.reply('❌ **حدث خطأ أثناء تغيير اسم الروم.**').catch(() => {});
-    }
-    return;
-  }
-
-  if (command === 'delete') {
-    const isSupport = message.member.permissions.has(PermissionFlagsBits.Administrator) || message.member.roles.cache.some(r => OWNER_ROLES.includes(r.id) || r.id === SUPPORT_ROLE_ID);
-    if (!isSupport) return message.reply('❌ **هذا الأمر مخصص للدعم الفني والأونرية فقط!**').catch(() => {});
-
-    if (!message.channel.name.startsWith('ticket-') && message.channel.name !== 'closed') {
-      return message.reply('❌ **لا يمكنك استخدام أمر الحذف إلا داخل روم التكتات فقط!**').catch(() => {});
-    }
-
-    await message.channel.send('🗑️ **جاري حذف التكت نهائياً...**').catch(() => {});
-    setTimeout(() => {
-      message.channel.delete().catch(() => {});
-    }, 2000);
-    return;
-  }
-});
-
-client.on('interactionCreate', async interaction => {
-  if (interaction.isButton()) {
-    if (interaction.customId === 'create_ticket') {
-      const guild = interaction.guild;
-      const member = interaction.member;
-      if (!guild || !member) return;
-
-      const cleanUsername = member.user.username.toLowerCase().replace(/[^a-z0-9]/g, '');
-      const existingChannel = guild.channels.cache.find(c => c.name === `ticket-${cleanUsername}`);
-      if (existingChannel) {
-        return interaction.reply({ content: `❌ لديك تكت مفتوحة مسبقاً: ${existingChannel}`, ephemeral: true }).catch(() => {});
-      }
-
-      try {
-        const ticketChannel = await guild.channels.create({
-          name: `ticket-${member.user.username.toLowerCase().replace(/[^a-z0-9]/g, '') || member.id}`,
-          type: ChannelType.GuildText,
-          permissionOverwrites: [
-            { id: guild.id, deny: [PermissionFlagsBits.ViewChannel] },
-            { id: member.id, allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages, PermissionFlagsBits.ReadMessageHistory] },
-            { id: SUPPORT_ROLE_ID, allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages, PermissionFlagsBits.ReadMessageHistory] },
-            ...OWNER_ROLES.map(roleId => ({ id: roleId, allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages, PermissionFlagsBits.ReadMessageHistory] }))
-          ],
-        });
-
-        const ticketEmbed = new EmbedBuilder()
-          .setTitle('🎫 تكت جديدة')
-          .setDescription(`أهلاً بك ${member}\nيرجى اختيار طريقة الدفع أو نوع الطلب من الأزرار بالأسفل ليتم خدمتكم في أقرب وقت.`)
-          .setColor(0x3498DB)
-          .setTimestamp();
-
-        const ticketRow = new ActionRowBuilder().addComponents(
-          new ButtonBuilder().setCustomId('pay_method').setLabel('طريقة الدفع (بنكي / adamc)').setStyle(ButtonStyle.Secondary).setEmoji('💳'),
-          new ButtonBuilder().setCustomId('claim_ticket').setLabel('استلام التكت').setStyle(ButtonStyle.Success).setEmoji('✅'),
-          new ButtonBuilder().setCustomId('close_ticket').setLabel('إغلاق وتغيير اسم التكت').setStyle(ButtonStyle.Danger).setEmoji('🔒')
-        );
-
-        await ticketChannel.send({ content: `${member} | <@&${SUPPORT_ROLE_ID}>`, embeds: [ticketEmbed], components: [ticketRow] }).catch(() => {});
-        await interaction.reply({ content: `✅ تم إنشاء تكت الخاص بك بنجاح: ${ticketChannel}`, ephemeral: true }).catch(() => {});
-      } catch (e) {
-        await interaction.reply({ content: '❌ حدث خطأ أثناء إنشاء التكت.', ephemeral: true }).catch(() => {});
-      }
-    }
-
-    if (interaction.customId === 'pay_method') {
-      const modal = new ModalBuilder()
-        .setCustomId('payment_modal')
-        .setTitle('اختيار طريقة الدفع وتفاصيل الطلب');
-
-      const methodInput = new TextInputBuilder()
-        .setCustomId('method_choice')
-        .setLabel('طريقة الدفع (بنكي أو adamc)')
-        .setStyle(TextInputStyle.Short)
-        .setPlaceholder('اكتب بنكي أو adamc')
-        .setRequired(true);
-
-      const detailsInput = new TextInputBuilder()
-        .setCustomId('order_details')
-        .setLabel('تفاصيل الطلب الخاص بك')
-        .setStyle(TextInputStyle.Paragraph)
-        .setPlaceholder('اكتب ما تريد بالضبط هنا...')
-        .setRequired(true);
-
-      modal.addComponents(new ActionRowBuilder().addComponents(methodInput), new ActionRowBuilder().addComponents(detailsInput));
-      await interaction.showModal(modal).catch(() => {});
-    }
-
-    if (interaction.customId === 'claim_ticket') {
-      let isSupport = false;
-      try {
-        isSupport = interaction.member.permissions.has(PermissionFlagsBits.Administrator) || interaction.member.roles.cache.some(r => OWNER_ROLES.includes(r.id) || r.id === SUPPORT_ROLE_ID);
-      } catch (e) {
-        isSupport = false;
-      }
-      if (!isSupport) return interaction.reply({ content: '❌ هذا الزر مخصص للدعم الفني فقط!', ephemeral: true }).catch(() => {});
-
-      const embed = EmbedBuilder.from(interaction.message.embeds[0]).addFields({ name: 'تم الاستلام بواسطة', value: `${interaction.user}`, inline: false });
-      const disabledRow = new ActionRowBuilder().addComponents(
-        new ButtonBuilder().setCustomId('pay_method').setLabel('طريقة الدفع (بنكي / adamc)').setStyle(ButtonStyle.Secondary).setEmoji('💳'),
-        new ButtonBuilder().setCustomId('claim_ticket').setLabel('تم الاستلام').setStyle(ButtonStyle.Success).setEmoji('✅').setDisabled(true),
-        new ButtonBuilder().setCustomId('close_ticket').setLabel('إغلاق وتغيير اسم التكت').setStyle(ButtonStyle.Danger).setEmoji('🔒')
-      );
-
-      await interaction.update({ embeds: [embed], components: [disabledRow] }).catch(() => {});
-      await interaction.channel.send(`✅ تم استلام التكت بواسطة الدعم الفني: ${interaction.user}`).catch(() => {});
-    }
-
-    if (interaction.customId === 'close_ticket') {
-      let isSupport = false;
-      try {
-        isSupport = interaction.member.permissions.has(PermissionFlagsBits.Administrator) || interaction.member.roles.cache.some(r => OWNER_ROLES.includes(r.id) || r.id === SUPPORT_ROLE_ID);
-      } catch (e) {
-        isSupport = false;
-      }
-      const ticketCreator = interaction.channel.name.replace('ticket-', '');
-      const isCreator = interaction.user.username.toLowerCase() === ticketCreator.toLowerCase();
-
-      if (!isSupport && !isCreator) {
-        return interaction.reply({ content: '❌ ليس لديك صلاحية لإغلاق هذا التكت!', ephemeral: true }).catch(() => {});
-      }
-
-      try {
-        await interaction.channel.setName('closed');
-        await interaction.reply({ content: '🔒 **تم إغلاق التكت وتغيير اسم الروم إلى closed.**', ephemeral: false }).catch(() => {});
-      } catch (e) {
-        await interaction.reply({ content: '❌ **حدث خطأ أثناء تغيير اسم الروم.**', ephemeral: true }).catch(() => {});
-      }
-    }
-  } else if (interaction.isModalSubmit()) {
-    if (interaction.customId === 'payment_modal') {
-      const method = interaction.fields.getTextInputValue('method_choice');
-      const details = interaction.fields.getTextInputValue('order_details');
-
-      const orderEmbed = new EmbedBuilder()
-        .setTitle('📋 تفاصيل الطلب الجديد')
-        .addFields(
-          { name: '👤 صاحب الطلب', value: `${interaction.user}`, inline: true },
-          { name: '💳 طريقة الدفع', value: method, inline: true },
-          { name: '📝 التفاصيل', value: details, inline: false }
-        )
-        .setColor(0xE67E22)
-        .setTimestamp();
-
-      await interaction.channel.send({ embeds: [orderEmbed] }).catch(() => {});
-      await interaction.reply({ content: '✅ تم إرسال تفاصيل الدفع والطلب بنجاح!', ephemeral: true }).catch(() => {});
     }
   }
 });
