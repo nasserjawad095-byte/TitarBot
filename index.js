@@ -1,5 +1,4 @@
 const { Client, GatewayIntentBits, EmbedBuilder, PermissionFlagsBits, ActionRowBuilder, StringSelectMenuBuilder, ButtonBuilder, ButtonStyle } = require('discord.js');
-const ms = require('ms'); // تأكد من تثبيت مكتبة ms إذا لم تكن مثبتة عبر: npm i ms
 
 const client = new Client({
     intents: [
@@ -15,6 +14,19 @@ let systemActive = true;
 
 const afkUsers = new Map();
 const dailyMessages = new Map();
+
+// دالة تحويل الوقت (بدون الحاجة لمكتبة خارجية لتجنب أي كراش)
+function parseDuration(timeStr) {
+    if (!timeStr) return null;
+    const match = timeStr.match(/^(\d+)([mhd])$/);
+    if (!match) return null;
+    const value = parseInt(match[1]);
+    const unit = match[2];
+    if (unit === 'm') return value * 60 * 1000;       // دقائق
+    if (unit === 'h') return value * 60 * 60 * 1000;  // ساعات
+    if (unit === 'd') return value * 24 * 60 * 60 * 1000; // أيام
+    return null;
+}
 
 // تصفير توب الرسائل تلقائياً كل 24 ساعة
 setInterval(() => {
@@ -218,7 +230,7 @@ client.on('messageCreate', async message => {
         const prize = args.slice(1).join(' ');
         if (!durationArg || !prize) return message.reply('⚠️ مثال للاستخدام: `+مسابقة 1h رتبة مميزة` أو `+مسابقة 30m نيترو`');
 
-        const millis = ms(durationArg);
+        const millis = parseDuration(durationArg);
         if (!millis) return message.reply('⚠️ صيغة الوقت غير صحيحة. أمثلة: `10m` (دقائق)، `1h` (ساعات)، `1d` (أيام).');
 
         const endsAt = Date.now() + millis;
@@ -250,7 +262,6 @@ client.on('messageCreate', async message => {
             participants.add(i.user.id);
             await i.reply({ content: '✅ تم تسجيل مشاركتك بنجاح في المسابقة!', ephemeral: true });
 
-            // تحديث عدد المشاركين في الإيمبد
             const updatedEmbed = EmbedBuilder.from(gEmbed)
                 .setDescription(`الجائزة: **${prize}**\nتنتهي المسابقة بعد: **${durationArg}** (<t:${Math.floor(endsAt / 1000)}:R>)\n\nاضغط على الزر أدناه للمشاركة! 🎁\n\nالمشاركون حتى الآن: **${participants.size}**`);
             await gMsg.edit({ embeds: [updatedEmbed] }).catch(() => {});
@@ -387,7 +398,7 @@ client.on('messageCreate', async message => {
     }
 
     // ==========================================
-    // أمر +help (مع قائمة منسدلة تضم قائمة خاصة بالأونر فقط)
+    // أمر +help (مع حماية قائمة الأونر وتأمينها تماماً)
     // ==========================================
     if (command === 'help') {
         const totalCommandsCount = 25;
@@ -492,7 +503,7 @@ client.on('messageCreate', async message => {
         collector.on('collect', async i => {
             const selectedValue = i.values[0];
 
-            // التحقق إذا حاول شخص غير الأونر فتح قائمة الأونر
+            // التحقق إذا حاول أي شخص غير الأونر فتح قائمة الأونر
             if (selectedValue === '4' && i.user.id !== message.guild.ownerId) {
                 return i.reply({ content: '❌ **غير متوفر!** هذه القائمة مخصصة لصاحب السيرفر (الأونر) فقط.', ephemeral: true });
             }
