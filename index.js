@@ -1,4 +1,5 @@
-const { Client, GatewayIntentBits, EmbedBuilder, PermissionFlagsBits, ActionRowBuilder, StringSelectMenuBuilder } = require('discord.js');
+const { Client, GatewayIntentBits, EmbedBuilder, PermissionFlagsBits, ActionRowBuilder, StringSelectMenuBuilder, ButtonBuilder, ButtonStyle } = require('discord.js');
+const ms = require('ms'); // تأكد من تثبيت مكتبة ms إذا لم تكن مثبتة عبر: npm i ms
 
 const client = new Client({
     intents: [
@@ -46,14 +47,14 @@ client.on('messageCreate', async message => {
     const currentCount = dailyMessages.get(message.author.id) || 0;
     dailyMessages.set(message.author.id, currentCount + 1);
 
-    // أزرار تحكم الأونر بالنظام
-    if (message.content === PREFIX + 'ايقاف') {
+    // أوامر تحكم الأونر بالنظام بالأسماء الجديدة
+    if (message.content === PREFIX + 'ايقاف-السستم') {
         if (message.author.id !== message.guild.ownerId) return message.reply('❌ هذا الأمر مخصص لأونر السيرفر فقط.');
         systemActive = false;
         return message.reply('🔴 تم إيقاف نظام البوت بشكل كامل.');
     }
 
-    if (message.content === PREFIX + 'تشغيل') {
+    if (message.content === PREFIX + 'تشغيل-السستم') {
         if (message.author.id !== message.guild.ownerId) return message.reply('❌ هذا الأمر مخصص لأونر السيرفر فقط.');
         systemActive = true;
         return message.reply('🟢 تم تفعيل نظام البوت وعمله بنجاح.');
@@ -65,8 +66,8 @@ client.on('messageCreate', async message => {
     const args = message.content.slice(PREFIX.length).trim().split(/ +/);
     const command = args.shift().toLowerCase();
 
-    // +افك
-    if (command === 'افك') {
+    // +afk (باللغة الإنجليزية كما طلبت)
+    if (command === 'afk') {
         const reason = args.join(' ') || 'بدون سبب';
         afkUsers.set(message.author.id, reason);
         return message.reply(`💤 تم ضبط حالتك إلى **غائب (AFK)**. السبب: **${reason}**`);
@@ -122,7 +123,7 @@ client.on('messageCreate', async message => {
         return message.reply({ embeds: [sEmbed] });
     }
 
-    // +بروفايل / +اي دي
+    // +بروفايل / +اي_دي
     if (command === 'بروفايل' || command === 'اي_دي') {
         const target = message.mentions.users.first() || message.author;
         const member = message.guild.members.cache.get(target.id);
@@ -172,7 +173,7 @@ client.on('messageCreate', async message => {
         return message.reply('👁️ الروم مرئي الآن للجميع.');
     }
 
-    // +تايم / +انتايم (Timeout)
+    // +تايم / +انتايم
     if (command === 'تايم') {
         if (!message.member.permissions.has(PermissionFlagsBits.ModerateMembers)) return message.reply('❌ لا تمتلك صلاحية الميوت.');
         const target = message.mentions.members.first();
@@ -210,22 +211,74 @@ client.on('messageCreate', async message => {
         }
     }
 
-    // +مسابقة (Giveaway)
+    // +مسابقة (Giveaway مرتبطة بزر تفاعلي وتوقيت مرن مثل 10m أو 1h أو 1d)
     if (command === 'مسابقة') {
         if (!message.member.permissions.has(PermissionFlagsBits.ManageGuild)) return message.reply('❌ لا تمتلك صلاحية إدارة السيرفر.');
-        const duration = args[0];
+        const durationArg = args[0];
         const prize = args.slice(1).join(' ');
-        if (!duration || !prize) return message.reply('⚠️ مثال للاستخدام: `+مسابقة 1h Nitro`');
-        
+        if (!durationArg || !prize) return message.reply('⚠️ مثال للاستخدام: `+مسابقة 1h رتبة مميزة` أو `+مسابقة 30m نيترو`');
+
+        const millis = ms(durationArg);
+        if (!millis) return message.reply('⚠️ صيغة الوقت غير صحيحة. أمثلة: `10m` (دقائق)، `1h` (ساعات)، `1d` (أيام).');
+
+        const endsAt = Date.now() + millis;
+        const participants = new Set();
+
         const gEmbed = new EmbedBuilder()
             .setColor('#5865F2')
             .setTitle('🎉 **مسابقة جديدة (GIVEAWAY)** 🎉')
-            .setDescription(`الجائزة: **${prize}**\nالمدة: **${duration}**\n\nاضغط على تفاعل 🎉 للمشاركة!`)
+            .setDescription(`الجائزة: **${prize}**\nتنتهي المسابقة بعد: **${durationArg}** (<t:${Math.floor(endsAt / 1000)}:R>)\n\nاضغط على الزر أدناه للمشاركة! 🎁\n\nالمشاركون حتى الآن: **0**`)
             .setTimestamp();
-        
-        const msg = await message.channel.send({ embeds: [gEmbed] });
-        await msg.react('🎉');
-        return message.delete().catch(() => {});
+
+        const gButton = new ActionRowBuilder().addComponents(
+            new ButtonBuilder()
+                .setCustomId('join_giveaway')
+                .setLabel('مشاركة (Join)')
+                .setStyle(ButtonStyle.Success)
+                .setEmoji('🎉')
+        );
+
+        const gMsg = await message.channel.send({ embeds: [gEmbed], components: [gButton] });
+        await message.delete().catch(() => {});
+
+        const collector = gMsg.createMessageComponentCollector({ time: millis });
+
+        collector.on('collect', async i => {
+            if (participants.has(i.user.id)) {
+                return i.reply({ content: '❌ أنت مشارك بالفعل في هذه المسابقة!', ephemeral: true });
+            }
+            participants.add(i.user.id);
+            await i.reply({ content: '✅ تم تسجيل مشاركتك بنجاح في المسابقة!', ephemeral: true });
+
+            // تحديث عدد المشاركين في الإيمبد
+            const updatedEmbed = EmbedBuilder.from(gEmbed)
+                .setDescription(`الجائزة: **${prize}**\nتنتهي المسابقة بعد: **${durationArg}** (<t:${Math.floor(endsAt / 1000)}:R>)\n\nاضغط على الزر أدناه للمشاركة! 🎁\n\nالمشاركون حتى الآن: **${participants.size}**`);
+            await gMsg.edit({ embeds: [updatedEmbed] }).catch(() => {});
+        });
+
+        collector.on('end', async () => {
+            const disabledButton = new ActionRowBuilder().addComponents(
+                new ButtonBuilder()
+                    .setCustomId('join_giveaway')
+                    .setLabel('انتهت المسابقة')
+                    .setStyle(ButtonStyle.Secondary)
+                    .setDisabled(true)
+            );
+
+            if (participants.size === 0) {
+                const endedEmbed = EmbedBuilder.from(gEmbed).setDescription(`الجائزة: **${prize}**\n❌ **انتهت المسابقة ولم يشارك أحد!**`);
+                return gMsg.edit({ embeds: [endedEmbed], components: [disabledButton] }).catch(() => {});
+            }
+
+            const winnersArr = Array.from(participants);
+            const winnerId = winnersArr[Math.floor(Math.random() * winnersArr.length)];
+
+            const winnerEmbed = EmbedBuilder.from(gEmbed)
+                .setDescription(`الجائزة: **${prize}**\n🏆 **الفائز بالمسابقة:** <@${winnerId}>\nمبروك! 🎉`);
+            
+            await gMsg.edit({ embeds: [winnerEmbed], components: [disabledButton] }).catch(() => {});
+            gMsg.channel.send(`🎉 مبروك لـ <@${winnerId}> لقد فزت بـ **${prize}**!`);
+        });
     }
 
     // +كيك / +بان / +مسح
@@ -254,7 +307,7 @@ client.on('messageCreate', async message => {
         setTimeout(() => reply.delete().catch(() => {}), 3000);
     }
 
-    // +رول جماعي (إعطاء رول لجميع أعضاء السيرفر)
+    // +رول-جماعي (إعطاء رول لجميع أعضاء السيرفر)
     if (command === 'رول-جماعي') {
         if (!message.member.permissions.has(PermissionFlagsBits.Administrator)) return message.reply('❌ هذا الأمر يتطلب صلاحية `Administrator`.');
         const role = message.mentions.roles.first();
@@ -334,10 +387,10 @@ client.on('messageCreate', async message => {
     }
 
     // ==========================================
-    // أمر +help (مع قائمة منسدلة Select Menu للاختيار منها)
+    // أمر +help (مع قائمة منسدلة تضم قائمة خاصة بالأونر فقط)
     // ==========================================
     if (command === 'help') {
-        const totalCommandsCount = 24;
+        const totalCommandsCount = 25;
 
         const getEmbed = (page) => {
             if (page === '1') {
@@ -346,8 +399,7 @@ client.on('messageCreate', async message => {
                     .setTitle('📜 قائمة المساعدة - قسم النظام، الإحصائيات والأونر')
                     .setDescription(`إجمالي الأوامر في البوت: **${totalCommandsCount}**\nاختر القسم المناسب من القائمة أدناه:`)
                     .addFields(
-                        { name: '**`+ايقاف` / `+تشغيل`**', value: '**إيقاف أو تفعيل نظام البوت بالكامل (للأونر).**', inline: false },
-                        { name: '**`+افك [السبب]`**', value: '**تحديد حالتك كغائب وتنبيه من يمنشنك.**', inline: false },
+                        { name: '**`+afk [السبب]`**', value: '**تحديد حالتك كغائب وتنبيه من يمنشنك.**', inline: false },
                         { name: '**`+رتب`**', value: '**عرض رتب السيرفر من الأقوى للأصغر.**', inline: false },
                         { name: '**`+توب`**', value: '**عرض أكثر 10 أعضاء تفاعلاً اليوم.**', inline: false },
                         { name: '**`+سيرفر`**', value: '**عرض معلومات السيرفر المفصلة.**', inline: false },
@@ -378,13 +430,23 @@ client.on('messageCreate', async message => {
                     .addFields(
                         { name: '**`+رول [@العضو] [@الرول]`**', value: '**تبديل الرتبة (إضافة أو إزالة).**', inline: false },
                         { name: '**`+رول-جماعي [@الرول]`**', value: '**إعطاء رول معينة لجميع أعضاء السيرفر دفعة واحدة.**', inline: false },
-                        { name: '**`+مسابقة [الوقت] [الجائزة]`**', value: '**بدء مسابقة تفاعلية مع تفاعل 🎉.**', inline: false },
+                        { name: '**`+مسابقة [الوقت] [الجائزة]`**', value: '**بدء مسابقة تفاعلية بزر المشاركة 🎉.**', inline: false },
                         { name: '**`+قول [النص]`**', value: '**تكرار رسالتك عبر البوت.**', inline: false },
                         { name: '**`+طوارئ` / `+فك-طوارئ`**', value: '**قفل أو فتح جميع رومات السيرفر دفعة واحدة.**', inline: false },
                         { name: '**`+بطيء [الثواني]`**', value: '**تحديد سرعة الشات البطيء للروم.**', inline: false },
                         { name: '**`+بروفايل` / `+صورة`**', value: '**عرض معلومات وبروفايل الأعضاء.**', inline: false }
                     )
                     .setFooter({ text: 'القائمة الثالثة | بواسطة ' + message.author.tag });
+            } else if (page === '4') {
+                return new EmbedBuilder()
+                    .setColor('#FF0000')
+                    .setTitle('👑 قائمة المساعدة - أوامر الأونر الخاصة')
+                    .setDescription(`هذه القائمة مخصصة **لصاحب السيرفر (الأونر)** فقط!\n\nالأوامر المتاحة هنا:`)
+                    .addFields(
+                        { name: '**`+ايقاف-السستم`**', value: '**إيقاف نظام البوت بشكل كامل.**', inline: false },
+                        { name: '**`+تشغيل-السستم`**', value: '**إعادة تفعيل وتشغيل نظام البوت.**', inline: false }
+                    )
+                    .setFooter({ text: 'قائمة الأونر | بواسطة ' + message.author.tag });
             }
         };
 
@@ -397,13 +459,13 @@ client.on('messageCreate', async message => {
                     .addOptions([
                         {
                             label: 'قسم النظام والإحصائيات',
-                            description: 'عرض أوامر النظام، الأونر، توب الرسائل، ومعلومات السيرفر',
+                            description: 'عرض أوامر AFK، توب الرسائل، ومعلومات السيرفر',
                             value: '1',
                             emoji: '📊'
                         },
                         {
                             label: 'قسم الإشراف والرومات',
-                            description: 'عرض أوامر البان، الكيك، الميوت، قفل وفتح الرومات',
+                            description: 'عرض أوامر البان، الكيك، الميوت، وقفل الرومات',
                             value: '2',
                             emoji: '🛡️'
                         },
@@ -412,6 +474,12 @@ client.on('messageCreate', async message => {
                             description: 'عرض أوامر الرول الجماعي، المسابقات، والطوارئ',
                             value: '3',
                             emoji: '⚙️'
+                        },
+                        {
+                            label: 'قائمة الأونر (صاحب السيرفر)',
+                            description: 'مخصصة لصاحب السيرفر فقط لإيقاف وتشغيل النظام',
+                            value: '4',
+                            emoji: '👑'
                         }
                     ])
             );
@@ -422,11 +490,17 @@ client.on('messageCreate', async message => {
         const collector = initialMsg.createMessageComponentCollector({ time: 60000 });
 
         collector.on('collect', async i => {
+            const selectedValue = i.values[0];
+
+            // التحقق إذا حاول شخص غير الأونر فتح قائمة الأونر
+            if (selectedValue === '4' && i.user.id !== message.guild.ownerId) {
+                return i.reply({ content: '❌ **غير متوفر!** هذه القائمة مخصصة لصاحب السيرفر (الأونر) فقط.', ephemeral: true });
+            }
+
             if (i.user.id !== message.author.id) {
                 return i.reply({ content: '❌ لا يمكنك استخدام هذه القائمة.', ephemeral: true });
             }
 
-            const selectedValue = i.values[0];
             await i.update({ embeds: [getEmbed(selectedValue)], components: [getMenu()] });
         });
 
