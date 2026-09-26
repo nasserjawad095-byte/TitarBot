@@ -10,7 +10,6 @@ const client = new Client({
     ]
 });
 
-// Handling Errors
 process.on('unhandledRejection', error => {
     console.error('Unhandled promise rejection:', error);
 });
@@ -21,7 +20,6 @@ process.on('uncaughtException', error => {
 const PREFIX = '#';
 let systemActive = true;
 
-// Databases / Maps
 const afkUsers = new Map();
 const dailyMessages = new Map();
 const userReputation = new Map();
@@ -31,7 +29,6 @@ const inviteTracker = new Map();
 const leftMembersCache = new Set();
 const snipeCache = new Map();
 
-// Exchange Rates Table
 const exchangeRates = {
     'ريال': 3.75,
     'sar': 3.75,
@@ -50,7 +47,6 @@ const exchangeRates = {
     'usdt': 1.0
 };
 
-// Function to parse time duration string (e.g. 1m, 1h, 1d)
 function parseDuration(timeStr) {
     if (!timeStr || typeof timeStr !== 'string') return null;
     const match = timeStr.match(/^(\d+)([mhd])$/);
@@ -63,7 +59,6 @@ function parseDuration(timeStr) {
     return null;
 }
 
-// Invite Cache System
 const guildInvitesCache = new Map();
 
 async function cacheGuildInvites(guild) {
@@ -77,7 +72,6 @@ async function cacheGuildInvites(guild) {
     }
 }
 
-// Daily Reset Timer
 setInterval(() => {
     dailyMessages.clear();
     console.log('[System] Daily messages leaderboard has been reset.');
@@ -98,7 +92,6 @@ client.on('inviteDelete', async invite => {
     cacheGuildInvites(invite.guild);
 });
 
-// Snipe Event Handler
 client.on('messageDelete', message => {
     if (!message.guild || message.author?.bot) return;
     
@@ -118,7 +111,6 @@ client.on('messageDelete', message => {
     }
 });
 
-// Member Join Event
 client.on('guildMemberAdd', async member => {
     try {
         const cachedInvites = guildInvitesCache.get(member.guild.id);
@@ -173,106 +165,20 @@ client.on('guildMemberAdd', async member => {
     }
 });
 
-// Member Remove Event
 client.on('guildMemberRemove', member => {
     leftMembersCache.add(member.id);
 });
 
-// Interactions (Select Menu for Help Command)
-client.on('interactionCreate', async interaction => {
-    if (!interaction.isStringSelectMenu()) return;
-
-    if (interaction.customId === 'select_help_category') {
-        const selected = interaction.values[0];
-
-        if (selected === 'help_admin') {
-            const adminEmbed = new EmbedBuilder()
-                .setColor('#E74C3C')
-                .setTitle('🛠️ الأوامر الإدارية')
-                .setDescription('قائمة بالأوامر المخصصة للمشرفين والإدارة:')
-                .addFields(
-                    { name: '`#قفل` / `#فتح`', value: 'قفل أو فتح الروم الحالي.' },
-                    { name: '`#اخفاء` / `#اظهار`', value: 'إخفاء أو إظهار الروم الحالي.' },
-                    { name: '`#تايم [العضو] [المعلمة]`', value: 'إعطاء ميوت مؤقت للعضو بالدقائق.' },
-                    { name: '`#انتايم [العضو]`', value: 'إلغاء الميوت عن العضو.' },
-                    { name: '`#فكبان [ID]`', value: 'فك الحظر عن عضو باستعمال الآي دي.' },
-                    { name: '`#warn [العضو] [السبب]`', value: 'إرسال تحذير إداري للعضو بالخاص.' },
-                    { name: '`#nick [العضو] [الاسم]`', value: 'تغيير لقب العضو بالسيرفر.' },
-                    { name: '`#slowmode [الثواني]`', value: 'ضبط الوضع البطيء للروم.' },
-                    { name: '`#استدعاء` أو `#c`', value: 'إرسال استدعاء رسمي للعضو بالخاص.' },
-                    { name: '`#gstart [الوقت] [الفائزين] [الجائزة]`', value: 'إنشاء مسابقة تفاعلية جديدة.' }
-                );
-            return await interaction.reply({ embeds: [adminEmbed], ephemeral: true });
-        }
-
-        if (selected === 'help_general') {
-            const generalEmbed = new EmbedBuilder()
-                .setColor('#3498DB')
-                .setTitle('🌐 الأوامر العامة والمعلومات')
-                .setDescription('أوامر الاستعلام والمعلومات العامة:')
-                .addFields(
-                    { name: '`#سيرفر`', value: 'عرض معلومات التفصيلية عن السيرفر.' },
-                    { name: '`#بروفايل` / `#اي_دي`', value: 'عرض بطاقة معلوماتك أو معلومات شخص أخر.' },
-                    { name: '`#صورة`', value: 'عرض صورة البروفايل الشخصية.' },
-                    { name: '`#servericon`', value: 'عرض صورة آيقونة السيرفر.' },
-                    { name: '`#serverbanner`', value: 'عرض بانر السيرفر الإنيميشن/العادي.' },
-                    { name: '`#رتب`', value: 'عرض قائمة بكل رتب السيرفر.' },
-                    { name: '`#توب`', value: 'عرض قائمة أكثر 10 أعضاء تفاعلاً بالرسائل اليوم.' },
-                    { name: '`#topactive`', value: 'عرض أكثر الأعضاء نشاطاً كلياً.' },
-                    { name: '`#i [العضو]`', value: 'كشف تفاصيل دعوة الانفايت للعضو هل تحسب أم لا.' },
-                    { name: '`#status`', value: 'عرض حالة البوت والبينغ وسرعة الاستجابة.' },
-                    { name: '`#firstmsg`', value: 'البحث عن أول رسالة للعضو بالروم.' },
-                    { name: '`#snipe` / `#snipeall`', value: 'عرض أحدث الرسائل المحذوفة بالروم.' },
-                    { name: '`#afk [السبب]`', value: 'تفعيل وضع الغياب التلقائي.' }
-                );
-            return await interaction.reply({ embeds: [generalEmbed], ephemeral: true });
-        }
-
-        if (selected === 'help_fun') {
-            const funEmbed = new EmbedBuilder()
-                .setColor('#2ECC71')
-                .setTitle('🎮 الأوامر الترفيهية والتفاعل')
-                .setDescription('أوامر التسلية والألعاب والسمعة:')
-                .addFields(
-                    { name: '`#luck`', value: 'اختبار نسبة حظك لهذا اليوم.' },
-                    { name: '`#fortune`', value: 'كرة التوقعات المستقبلية والعشوائية.' },
-                    { name: '`#challenge [العضو]`', value: 'تحدي عضو آخر في السيرفر.' },
-                    { name: '`#rep [العضو]`', value: 'إعطاء نقطة سمعة تقديرية لعضو كل 24 ساعة.' },
-                    { name: '`#repboard`', value: 'عرض قائمة شرف أصحاب أعلى نقط سمعة.' },
-                    { name: '`#greet [العضو]`', value: 'إرسال الترحيب الخاص بك للروم.' },
-                    { name: '`#activity`', value: 'عرض إجمالي تفاعلاتك المسجلة.' }
-                );
-            return await interaction.reply({ embeds: [funEmbed], ephemeral: true });
-        }
-
-        if (selected === 'help_economy') {
-            const ecoEmbed = new EmbedBuilder()
-                .setColor('#F1C40F')
-                .setTitle('💱 أوامر تحويل العملات')
-                .setDescription('تحويل العملات العربية والأجنبية فورياً إلى الدولار:')
-                .addFields(
-                    { name: '`#صرف [المبلغ] [العملة]`', value: 'مثال: `#صرف 100000 ليرة` أو `#صرف 500 ريال`' },
-                    { name: 'العملات المدعومة', value: '`ريال (sar)`, `درهم (aed)`, `يورو (eur)`, `ليرة (lbp)`, `جنيه (egp)`, `دينار (iqd)`, `دولار (usd)`' }
-                );
-            return await interaction.reply({ embeds: [ecoEmbed], ephemeral: true });
-        }
-    }
-});
-
-// Messages Handler Event
 client.on('messageCreate', async message => {
     try {
         if (!message.guild || message.author.bot) return;
 
-        // Message Leaderboard Counter
         const currentCount = dailyMessages.get(message.author.id) || 0;
         dailyMessages.set(message.author.id, currentCount + 1);
 
-        // Overall Activity Counter
         const totalAct = userActivityCount.get(message.author.id) || 0;
         userActivityCount.set(message.author.id, totalAct + 1);
 
-        // AFK Checking System
         if (afkUsers.has(message.author.id)) {
             afkUsers.delete(message.author.id);
             message.reply('أهلاً بك مجدداً! تم إزالة حالة الـ AFK عنك.').then(msg => setTimeout(() => msg.delete().catch(() => {}), 4000)).catch(() => {});
@@ -286,7 +192,6 @@ client.on('messageCreate', async message => {
             });
         }
 
-        // Global System Activation Switch
         if (message.content === PREFIX + 'ايقاف-السستم') {
             if (message.author.id !== message.guild.ownerId) return message.reply('❌ هذا الأمر مخصص لأونر السيرفر فقط.');
             systemActive = false;
@@ -305,61 +210,24 @@ client.on('messageCreate', async message => {
         const args = message.content.slice(PREFIX.length).trim().split(/ +/);
         const command = args.shift().toLowerCase();
 
-        // -----------------------------------------------------------------------------------
-        // COMMAND: #help / #h / #H
-        // -----------------------------------------------------------------------------------
-        if (command === 'help' || command === 'h') {
-            const helpMenuEmbed = new EmbedBuilder()
+        // --- أمر الهيلب (مساعدة) مع جميع اختصاراته ---
+        if (['help', 'h', 'هيلب', 'مساعدة'].includes(command)) {
+            const helpEmbed = new EmbedBuilder()
                 .setColor('#5865F2')
-                .setTitle('✨ قائمة المساعدة والأوامر')
-                .setDescription('مرحباً بك! اختر القسم الذي تريد استكشافه من القائمة المنسدلة أسفله:')
+                .setTitle('📜 قائمة الأوامر المتاحة')
+                .setDescription('إليك قائمة الأوامر التي يمكنك استخدامها في البوت:')
                 .addFields(
-                    { name: '🛠️ الأوامر الإدارية', value: 'أوامر التحكم والميوت والقفل والمسابقات.', inline: true },
-                    { name: '🌐 الأوامر العامة', value: 'أوامر تفاصيل السيرفر والبروفايل والإنفايت.', inline: true },
-                    { name: '🎮 التسلية والسمعة', value: 'أوامر التحديات، الحظ والسمعة والمرح.', inline: true },
-                    { name: '💱 تحويل العملات', value: 'حساب وأسعار صرف العملات فورياً.', inline: true }
+                    { name: '🛠️ **الأوامر الإدارية**', value: '`#قفل`, `#فتح`, `#اخفاء`, `#اظهار`, `#استدعاء` (أو `#c`), `#warn`, `#slowmode`, `#nick`, `#تايم`, `#انتايم`, `#فكبان`, `#gstart`' },
+                    { name: '🎉 **مسابقة الجيف أواي**', value: '`#gstart [الوقت] [عدد الفائزين (اختياري)] [الجائزة]`\nمثال 1: `#gstart 1h رتبة مميزة` (فائز واحد تلقائياً)\nمثال 2: `#gstart 1h 3 رتبة مميزة` (3 فائزين)' },
+                    { name: 'ℹ️ **أوامر المعلومات والصور**', value: '`#i`, `#status`, `#firstmsg`, `#servericon`, `#serverbanner`, `#رتب`, `#سيرفر`, `#بروفايل` (أو `#اي_دي`), `#صورة`' },
+                    { name: '⚙️ **الأوامر التفاعلية والترفيهيه**', value: '`#afk`, `#greet`, `#luck`, `#fortune`, `#challenge`, `#rep`, `#repboard`, `#activity`, `#topactive`, `#توب`, `#صرف`' }
                 )
-                .setFooter({ text: `طلب بواسطة: ${message.author.username}`, iconURL: message.author.displayAvatarURL({ dynamic: true }) })
+                .setFooter({ text: `البريفكس الحالي: ${PREFIX}` })
                 .setTimestamp();
 
-            const selectMenu = new ActionRowBuilder().addComponents(
-                new StringSelectMenuBuilder()
-                    .setCustomId('select_help_category')
-                    .setPlaceholder('اختر الفئة للاستعراض...')
-                    .addOptions([
-                        {
-                            label: 'الأوامر الإدارية',
-                            description: 'قفل، فتح، تايم، بان، استدعاء، مسابقات...',
-                            value: 'help_admin',
-                            emoji: '🛠️'
-                        },
-                        {
-                            label: 'الأوامر العامة والمعلومات',
-                            description: 'سيرفر، بروفايل، صورة، آي دي، انفايت...',
-                            value: 'help_general',
-                            emoji: '🌐'
-                        },
-                        {
-                            label: 'الأوامر الترفيهية',
-                            description: 'حظ، توقعات، تحديات، سمعة...',
-                            value: 'help_fun',
-                            emoji: '🎮'
-                        },
-                        {
-                            label: 'تحويل العملات',
-                            description: 'تحويل الليرة، الريال، الدرهم، الدينار...',
-                            value: 'help_economy',
-                            emoji: '💱'
-                        }
-                    ])
-            );
-
-            return message.reply({ embeds: [helpMenuEmbed], components: [selectMenu] });
+            return message.reply({ embeds: [helpEmbed] });
         }
 
-        // -----------------------------------------------------------------------------------
-        // COMMAND: Snipe
-        // -----------------------------------------------------------------------------------
         if (command === 'snipe') {
             const channelSnipes = snipeCache.get(message.channel.id);
             if (!channelSnipes || channelSnipes.length === 0) {
@@ -381,9 +249,6 @@ client.on('messageCreate', async message => {
             return message.reply({ embeds: [snipeEmbed] });
         }
 
-        // -----------------------------------------------------------------------------------
-        // COMMAND: SnipeAll
-        // -----------------------------------------------------------------------------------
         if (command === 'snipeall') {
             const channelSnipes = snipeCache.get(message.channel.id);
             if (!channelSnipes || channelSnipes.length === 0) {
@@ -405,9 +270,6 @@ client.on('messageCreate', async message => {
             return message.reply({ embeds: [snipeAllEmbed] });
         }
 
-        // -----------------------------------------------------------------------------------
-        // COMMAND: Status
-        // -----------------------------------------------------------------------------------
         if (command === 'status') {
             const ping = client.ws.ping;
             const uptimeSeconds = Math.floor(client.uptime / 1000);
@@ -426,9 +288,6 @@ client.on('messageCreate', async message => {
             return message.reply({ embeds: [statusEmbed] });
         }
 
-        // -----------------------------------------------------------------------------------
-        // COMMAND: Invite Checker (#i)
-        // -----------------------------------------------------------------------------------
         if (command === 'i') {
             const target = message.mentions.users.first() || message.author;
             const inviteData = inviteTracker.get(target.id);
@@ -452,9 +311,6 @@ client.on('messageCreate', async message => {
             return message.reply({ embeds: [embed] });
         }
 
-        // -----------------------------------------------------------------------------------
-        // COMMAND: Summon (#استدعاء / #c)
-        // -----------------------------------------------------------------------------------
         if (command === 'استدعاء' || command === 'c') {
             if (!message.member.permissions.has(PermissionFlagsBits.ManageMessages)) {
                 return message.reply('❌ ليس لديك صلاحية لاستخدام أمر الاستدعاء.');
@@ -485,9 +341,6 @@ client.on('messageCreate', async message => {
             }
         }
 
-        // -----------------------------------------------------------------------------------
-        // COMMAND: Warn
-        // -----------------------------------------------------------------------------------
         if (command === 'warn') {
             if (!message.member.permissions.has(PermissionFlagsBits.ModerateMembers)) return message.reply('❌ لا تمتلك صلاحية التحذير.');
             const target = message.mentions.members.first();
@@ -502,9 +355,6 @@ client.on('messageCreate', async message => {
             }
         }
 
-        // -----------------------------------------------------------------------------------
-        // COMMAND: Slowmode
-        // -----------------------------------------------------------------------------------
         if (command === 'slowmode') {
             if (!message.member.permissions.has(PermissionFlagsBits.ManageChannels)) return message.reply('❌ لا تمتلك صلاحية إدارة الرومات.');
             const time = parseInt(args[0]);
@@ -513,9 +363,6 @@ client.on('messageCreate', async message => {
             return message.reply(time === 0 ? '⏱️ تم إلغاء الوضع البطيء.' : `⏱️ تم ضبط الوضع البطيء على **${time}** ثانية.`);
         }
 
-        // -----------------------------------------------------------------------------------
-        // COMMAND: First Message
-        // -----------------------------------------------------------------------------------
         if (command === 'firstmsg') {
             const target = message.mentions.users.first() || message.author;
             await message.channel.sendTyping();
@@ -533,9 +380,6 @@ client.on('messageCreate', async message => {
             }
         }
 
-        // -----------------------------------------------------------------------------------
-        // COMMAND: Nickname
-        // -----------------------------------------------------------------------------------
         if (command === 'nick') {
             if (!message.member.permissions.has(PermissionFlagsBits.ManageNicknames)) return message.reply('❌ لا تمتلك صلاحية تعديل النك نيم.');
             const target = message.mentions.members.first();
@@ -555,9 +399,6 @@ client.on('messageCreate', async message => {
             }
         }
 
-        // -----------------------------------------------------------------------------------
-        // COMMAND: Server Icon
-        // -----------------------------------------------------------------------------------
         if (command === 'servericon') {
             const iconUrl = message.guild.iconURL({ dynamic: true, size: 1024 });
             if (!iconUrl) return message.reply('❌ هذا السيرفر لا يملك صورة.');
@@ -568,9 +409,6 @@ client.on('messageCreate', async message => {
             return message.reply({ embeds: [iconEmbed] });
         }
 
-        // -----------------------------------------------------------------------------------
-        // COMMAND: Server Banner
-        // -----------------------------------------------------------------------------------
         if (command === 'serverbanner') {
             const bannerUrl = message.guild.bannerURL({ size: 1024 });
             if (!bannerUrl) return message.reply('❌ هذا السيرفر لا يملك بانر.');
@@ -581,9 +419,6 @@ client.on('messageCreate', async message => {
             return message.reply({ embeds: [bannerEmbed] });
         }
 
-        // -----------------------------------------------------------------------------------
-        // COMMAND: Luck Test
-        // -----------------------------------------------------------------------------------
         if (command === 'luck') {
             const target = message.mentions.users.first() || message.author;
             const luckPercentage = Math.floor(Math.random() * 101);
@@ -599,12 +434,9 @@ client.on('messageCreate', async message => {
             return message.reply({ embeds: [luckEmbed] });
         }
 
-        // -----------------------------------------------------------------------------------
-        // COMMAND: Fortune Cookie
-        // -----------------------------------------------------------------------------------
         if (command === 'fortune') {
             const fortunes = [
-                'ستحقّق إنجازاً عظيماً قريباً وتفاجئ الجميع! 🌟',
+                'ستحقق إنجازاً عظيماً قريباً وتفاجئ الجميع! 🌟',
                 'ستحصل على هدية غير متوقعة في الأيام القادمة 🎁.',
                 'فرصة ذهبية ستطرق بابك قريبًا، كن مستعداً لها 🚪✨.',
                 'ستقابل شخصاً جديداً سيغير مجرى بعض الأمور في حياتك 🤝.',
@@ -620,9 +452,6 @@ client.on('messageCreate', async message => {
             return message.reply({ embeds: [fortuneEmbed] });
         }
 
-        // -----------------------------------------------------------------------------------
-        // COMMAND: Challenge
-        // -----------------------------------------------------------------------------------
         if (command === 'challenge') {
             const target = message.mentions.users.first();
             if (!target || target.id === message.author.id) return message.reply('⚠️ يرجى منشن شخص لتحديه: `#challenge @العضو`');
@@ -642,9 +471,6 @@ client.on('messageCreate', async message => {
             return message.reply({ embeds: [chalEmbed] });
         }
 
-        // -----------------------------------------------------------------------------------
-        // COMMAND: Reputation System (#rep)
-        // -----------------------------------------------------------------------------------
         if (command === 'rep') {
             const target = message.mentions.users.first();
             if (!target || target.id === message.author.id) return message.reply('⚠️ يرجى منشن عضو لإعطائه سمعة: `#rep @العضو`');
@@ -671,9 +497,6 @@ client.on('messageCreate', async message => {
             return message.reply({ embeds: [repEmbed] });
         }
 
-        // -----------------------------------------------------------------------------------
-        // COMMAND: Reputation Leaderboard
-        // -----------------------------------------------------------------------------------
         if (command === 'repboard') {
             const sortedRep = [...userReputation.entries()].sort((a, b) => b[1] - a[1]).slice(0, 10);
             let desc = sortedRep.length === 0 ? 'لا توجد نقاط سمعة مسجلة بعد.' : '';
@@ -689,9 +512,6 @@ client.on('messageCreate', async message => {
             return message.reply({ embeds: [repBoardEmbed] });
         }
 
-        // -----------------------------------------------------------------------------------
-        // COMMAND: Activity Check
-        // -----------------------------------------------------------------------------------
         if (command === 'activity') {
             const target = message.mentions.users.first() || message.author;
             const actCount = userActivityCount.get(target.id) || 0;
@@ -702,9 +522,6 @@ client.on('messageCreate', async message => {
             return message.reply({ embeds: [actEmbed] });
         }
 
-        // -----------------------------------------------------------------------------------
-        // COMMAND: Top Activity Leaderboard
-        // -----------------------------------------------------------------------------------
         if (command === 'topactive') {
             const sortedAct = [...userActivityCount.entries()].sort((a, b) => b[1] - a[1]).slice(0, 10);
             let desc = sortedAct.length === 0 ? 'لا توجد بيانات نشاط بعد.' : '';
@@ -720,18 +537,12 @@ client.on('messageCreate', async message => {
             return message.reply({ embeds: [topActEmbed] });
         }
 
-        // -----------------------------------------------------------------------------------
-        // COMMAND: AFK Mode
-        // -----------------------------------------------------------------------------------
         if (command === 'afk') {
             const reason = args.join(' ') || 'بدون سبب';
             afkUsers.set(message.author.id, reason);
             return message.reply(`💤 تم ضبط حالتك إلى **غائب (AFK)**. السبب: **${reason}**`);
         }
 
-        // -----------------------------------------------------------------------------------
-        // COMMAND: Greet Message
-        // -----------------------------------------------------------------------------------
         if (command === 'greet') {
             const target = message.mentions.members.first() || message.member;
             await message.delete().catch(() => {});
@@ -740,9 +551,6 @@ client.on('messageCreate', async message => {
             return;
         }
 
-        // -----------------------------------------------------------------------------------
-        // COMMAND: Currency Converter (#صرف / #تحويل)
-        // -----------------------------------------------------------------------------------
         if (command === 'صرف' || command === 'تحويل') {
             const amount = parseFloat(args[0]);
             const currency = args[1] ? args[1].toLowerCase() : '';
@@ -770,9 +578,6 @@ client.on('messageCreate', async message => {
             return message.reply({ embeds: [convertEmbed] });
         }
 
-        // -----------------------------------------------------------------------------------
-        // COMMAND: Roles List (#رتب)
-        // -----------------------------------------------------------------------------------
         if (command === 'رتب') {
             const rolesList = message.guild.roles.cache
                 .filter(r => r.id !== message.guild.id)
@@ -787,9 +592,6 @@ client.on('messageCreate', async message => {
             return message.reply({ embeds: [rEmbed] });
         }
 
-        // -----------------------------------------------------------------------------------
-        // COMMAND: Daily Top Messages (#توب)
-        // -----------------------------------------------------------------------------------
         if (command === 'توب') {
             const sorted = [...dailyMessages.entries()].sort((a, b) => b[1] - a[1]).slice(0, 10);
             let description = sorted.length === 0 ? 'لم يتم تسجيل رسائل اليوم بعد.' : '';
@@ -805,9 +607,6 @@ client.on('messageCreate', async message => {
             return message.reply({ embeds: [topEmbed] });
         }
 
-        // -----------------------------------------------------------------------------------
-        // COMMAND: Server Info (#سيرفر)
-        // -----------------------------------------------------------------------------------
         if (command === 'سيرفر') {
             const owner = await message.guild.fetchOwner();
             const sEmbed = new EmbedBuilder()
@@ -822,9 +621,6 @@ client.on('messageCreate', async message => {
             return message.reply({ embeds: [sEmbed] });
         }
 
-        // -----------------------------------------------------------------------------------
-        // COMMAND: User Info (#بروفايل / #اي_دي)
-        // -----------------------------------------------------------------------------------
         if (command === 'بروفايل' || command === 'اي_دي') {
             const target = message.mentions.users.first() || message.author;
             const member = message.guild.members.cache.get(target.id);
@@ -841,9 +637,6 @@ client.on('messageCreate', async message => {
             return message.reply({ embeds: [embed] });
         }
 
-        // -----------------------------------------------------------------------------------
-        // COMMAND: Avatar / Picture (#صورة)
-        // -----------------------------------------------------------------------------------
         if (command === 'صورة') {
             const target = message.mentions.users.first() || message.author;
             const embed = new EmbedBuilder()
@@ -853,45 +646,28 @@ client.on('messageCreate', async message => {
             return message.reply({ embeds: [embed] });
         }
 
-        // -----------------------------------------------------------------------------------
-        // COMMAND: Lock Channel (#قفل)
-        // -----------------------------------------------------------------------------------
         if (command === 'قفل') {
             if (!message.member.permissions.has(PermissionFlagsBits.ManageChannels)) return message.reply('❌ لا تمتلك صلاحية.');
             await message.channel.permissionOverwrites.edit(message.guild.roles.everyone, { SendMessages: false });
             return message.reply('🔒 تم قفل الروم بنجاح.');
         }
-
-        // -----------------------------------------------------------------------------------
-        // COMMAND: Unlock Channel (#فتح)
-        // -----------------------------------------------------------------------------------
         if (command === 'فتح') {
             if (!message.member.permissions.has(PermissionFlagsBits.ManageChannels)) return message.reply('❌ لا تمتلك صلاحية.');
             await message.channel.permissionOverwrites.edit(message.guild.roles.everyone, { SendMessages: null });
             return message.reply('🔓 تم فتح الروم.');
         }
 
-        // -----------------------------------------------------------------------------------
-        // COMMAND: Hide Channel (#اخفاء)
-        // -----------------------------------------------------------------------------------
         if (command === 'اخفاء') {
             if (!message.member.permissions.has(PermissionFlagsBits.ManageChannels)) return message.reply('❌ لا تمتلك صلاحيات كافية.');
             await message.channel.permissionOverwrites.edit(message.guild.roles.everyone, { ViewChannel: false });
             return message.reply('🙈 تم إخفاء الروم.');
         }
-
-        // -----------------------------------------------------------------------------------
-        // COMMAND: Show Channel (#اظهار)
-        // -----------------------------------------------------------------------------------
         if (command === 'اظهار') {
             if (!message.member.permissions.has(PermissionFlagsBits.ManageChannels)) return message.reply('❌ لا تمتلك صلاحيات كافية.');
             await message.channel.permissionOverwrites.edit(message.guild.roles.everyone, { ViewChannel: null });
             return message.reply('👁️ الروم مرئي الآن للجميع.');
         }
 
-        // -----------------------------------------------------------------------------------
-        // COMMAND: Timeout (#تايم)
-        // -----------------------------------------------------------------------------------
         if (command === 'تايم') {
             if (!message.member.permissions.has(PermissionFlagsBits.ModerateMembers)) return message.reply('❌ لا تمتلك صلاحية الميوت.');
             const target = message.mentions.members.first();
@@ -904,10 +680,6 @@ client.on('messageCreate', async message => {
                 return message.reply('❌ خطأ: تحقق من رتبة العضو.');
             }
         }
-
-        // -----------------------------------------------------------------------------------
-        // COMMAND: Remove Timeout (#انتايم)
-        // -----------------------------------------------------------------------------------
         if (command === 'انتايم') {
             if (!message.member.permissions.has(PermissionFlagsBits.ModerateMembers)) return message.reply('❌ لا تمتلك صلاحية إزالة الميوت.');
             const target = message.mentions.members.first();
@@ -920,9 +692,6 @@ client.on('messageCreate', async message => {
             }
         }
 
-        // -----------------------------------------------------------------------------------
-        // COMMAND: Unban (#فكبان)
-        // -----------------------------------------------------------------------------------
         if (command === 'فكبان') {
             if (!message.member.permissions.has(PermissionFlagsBits.BanMembers)) return message.reply('❌ لا تمتلك صلاحية فك البان.');
             const userId = args[0]?.replace(/[<@!>]/g, '');
@@ -935,29 +704,33 @@ client.on('messageCreate', async message => {
             }
         }
 
-        // -----------------------------------------------------------------------------------
-        // COMMAND: Giveaway (#gstart)
-        // -----------------------------------------------------------------------------------
+        // --- أمر الجيف أواي المعدل لاختيار عدد الفائزين ---
         if (command === 'gstart') {
             if (!message.member.permissions.has(PermissionFlagsBits.ManageGuild)) return message.reply('❌ لا تمتلك صلاحية إدارة السيرفر.');
             
             const durationArg = args[0];
-            const winnerCount = parseInt(args[1]);
-            const prize = args.slice(2).join(' ');
-
-            if (!durationArg || isNaN(winnerCount) || winnerCount < 1 || !prize) {
-                return message.reply('⚠️ طريقة الاستخدام الصحيحة:\n`#gstart [الوقت] [عدد الفائزين] [الجائزة]`\nمثال: `#gstart 1h 1 رتبة مميزة`');
-            }
+            if (!durationArg) return message.reply('⚠️ مثال للاستخدام:\n`#gstart 1h رتبة مميزة` (فائز واحد)\n`#gstart 1h 3 رتبة مميزة` (عدّة فائزين)');
 
             const millis = parseDuration(durationArg);
-            if (!millis) return message.reply('⚠️ صيغة الوقت غير صحيحة. استخدم m للـدقائق أو h للـساعات أو d للـأيام (مثال: 30m, 1h, 2d).');
+            if (!millis) return message.reply('⚠️ صيغة الوقت غير صحيحة. استخدم الحروف m أو h أو d (مثال: 30m أو 1h أو 2d).');
 
-            const endTime = Math.floor((Date.now() + millis) / 1000);
+            let winnerCount = 1;
+            let prize = '';
+
+            // فحص ما إذا كان وسيط عدد الفائزين موجوداً
+            if (args[1] && !isNaN(args[1]) && parseInt(args[1]) > 0) {
+                winnerCount = parseInt(args[1]);
+                prize = args.slice(2).join(' ');
+            } else {
+                prize = args.slice(1).join(' ');
+            }
+
+            if (!prize) return message.reply('⚠️ يرجى تحديد الجائزة الخاصة بالمسابقة.');
 
             const gEmbed = new EmbedBuilder()
                 .setColor('#5865F2')
                 .setTitle('🎉 **مسابقة جديدة (GIVEAWAY)** 🎉')
-                .setDescription(`🎁 **الجائزة:** **${prize}**\n👥 **عدد الفائزين:** **${winnerCount}**\n⏱️ **تنتهي:** <t:${endTime}:R> (<t:${endTime}:f>)\n👑 **بواسطة:** ${message.author}\n\nتفاعل بـ 🎉 للمشاركة في المسابقة!`)
+                .setDescription(`الجائزة: **${prize}**\nعدد الفائزين: **${winnerCount}**\nتنتهي بعد: **${durationArg}**\n\nتفاعل بـ 🎉 للمشاركة في المسابقة! 🎁`)
                 .setTimestamp(Date.now() + millis);
 
             const gMsg = await message.channel.send({ embeds: [gEmbed] });
@@ -975,39 +748,36 @@ client.on('messageCreate', async message => {
                     }
 
                     const users = await reaction.users.fetch();
-                    const validUsers = users.filter(u => !u.bot);
+                    const validUsers = users.filter(user => !user.bot);
 
                     if (validUsers.size === 0) {
-                        const endEmbedNoWinner = EmbedBuilder.from(gEmbed)
-                            .setColor('#FF0000')
+                        const endedEmbed = new EmbedBuilder()
+                            .setColor('#ED4245')
                             .setTitle('🎉 **انتهت المسابقة** 🎉')
-                            .setDescription(`🎁 **الجائزة:** **${prize}**\n❌ **النتيجة:** لم يشارك أحد في المسابقة.`);
-                        await fetchedMsg.edit({ embeds: [endEmbedNoWinner] });
-                        return message.channel.send(`❌ انتهت المسابقة على **${prize}** لكن لم يشارك أحد!`);
+                            .setDescription(`الجائزة: **${prize}**\nالنتيجة: **لم يشارك أحد في المسابقة!** 😢`);
+                        return fetchedMsg.edit({ embeds: [endedEmbed] });
                     }
 
-                    const winners = validUsers.random(Math.min(winnerCount, validUsers.size));
-                    const winnersList = Array.isArray(winners) ? winners.map(w => `<@${w.id}>`).join(', ') : `<@${winners.id}>`;
+                    // اختيار الفائزين عشوائياً بناءً على عدد الفائزين المكتوب
+                    const winnerArray = validUsers.random(Math.min(winnerCount, validUsers.size));
+                    const winnersMention = Array.isArray(winnerArray) ? winnerArray.map(w => `<@${w.id}>`).join(', ') : `<@${winnerArray.id}>`;
 
-                    const endEmbed = EmbedBuilder.from(gEmbed)
-                        .setColor('#00FF00')
-                        .setTitle('🎉 **انتهت المسابقة** 🎉')
-                        .setDescription(`🎁 **الجائزة:** **${prize}**\n🏆 **الفائزين:** ${winnersList}`);
+                    const winnerEmbed = new EmbedBuilder()
+                        .setColor('#57F287')
+                        .setTitle('🎉 **انتهت المسابقة!** 🎉')
+                        .setDescription(`الجائزة: **${prize}**\nالفائزون: ${winnersMention}\n\nألف مبروك للفائزين! 🥳✨`);
 
-                    await fetchedMsg.edit({ embeds: [endEmbed] });
-                    return message.channel.send(`🎉 مبروك ${winnersList}! لقد فزت بـ **${prize}**! 🥳`);
-
-                } catch (err) {
-                    console.error('Error handling giveaway end:', err);
+                    await fetchedMsg.edit({ embeds: [winnerEmbed] });
+                    return message.channel.send(`🎉 مبروك يا ${winnersMention}! لقد فزتم بـ **${prize}**!`);
+                } catch (e) {
+                    console.error('Error ending giveaway:', e);
                 }
             }, millis);
-            return;
         }
 
-    } catch (error) {
-        console.error('Error in messageCreate:', error);
+    } catch (err) {
+        console.error('Error in messageCreate:', err);
     }
 });
 
-// Login
 client.login('YOUR_BOT_TOKEN_HERE');
