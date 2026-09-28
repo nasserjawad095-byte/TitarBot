@@ -1,4 +1,4 @@
-const { Client, GatewayIntentBits, EmbedBuilder, PermissionFlagsBits, ActionRowBuilder, StringSelectMenuBuilder } = require('discord.js');
+const { Client, GatewayIntentBits, EmbedBuilder, PermissionFlagsBits, ActionRowBuilder, ButtonBuilder, ButtonStyle, ChannelType, ModalBuilder, TextInputBuilder, TextInputStyle, StringSelectMenuBuilder } = require('discord.js');
 
 const client = new Client({
     intents: [
@@ -17,7 +17,7 @@ process.on('uncaughtException', error => {
     console.error('Uncaught exception:', error);
 });
 
-const PREFIX = '#';
+const PREFIX = '+';
 let systemActive = true;
 
 const afkUsers = new Map();
@@ -28,6 +28,11 @@ const userActivityCount = new Map();
 const inviteTracker = new Map();
 const leftMembersCache = new Set();
 const snipeCache = new Map();
+
+// نظام إعداد التكتات المؤقت لكل سيرفر
+const ticketSetups = new Map();
+// نظام تخزين معلومات التذاكر (من استلمها وغيرها)
+const ticketDataMap = new Map();
 
 const exchangeRates = {
     'ريال': 3.75,
@@ -210,6 +215,61 @@ client.on('messageCreate', async message => {
         const args = message.content.slice(PREFIX.length).trim().split(/ +/);
         const command = args.shift().toLowerCase();
 
+        // ==================== أمر إعداد التكتات الاحترافي (Ticket Setup) ====================
+        if (command === 'ticket-setup' || command === 'تكت-سيتوب') {
+            // حذف رسالة الأمر تماماً من الشات لكي لا يراها أحد
+            await message.delete().catch(() => {});
+
+            if (!message.member.permissions.has(PermissionFlagsBits.Administrator)) {
+                return; // إذا لم يكن أدمن يتم تجاهل الأمر وصمت تام
+            }
+
+            if (!ticketSetups.has(message.guild.id)) {
+                ticketSetups.set(message.guild.id, {
+                    title: '🎫 نظام تذاكر الدعم الفني',
+                    description: 'لفتح تذكرة جديدة، يرجى الضغط على الزر أدناه وسيقوم فريق الدعم بمساعدتك في أقرب وقت.',
+                    buttonText: 'فتح تذكرة 🎫',
+                    supportRoleId: null,
+                    categoryId: null,
+                    logChannelId: null,
+                    targetChannelId: message.channel.id
+                });
+            }
+
+            const data = ticketSetups.get(message.guild.id);
+
+            const embed = new EmbedBuilder()
+                .setColor('#5865F2')
+                .setTitle('⚙️ لوحة إعداد وتكوين التكتات')
+                .setDescription('قم بتعديل إعدادات التكتات الخاصة بسيرفرك باستخدام الأزرار أدناه بكل سهولة ونظام مرتب:')
+                .addFields(
+                    { name: '📌 عنوان الإمبيد الحالي', value: `\`${data.title}\``, inline: false },
+                    { name: '🛡️ رتبة الدعم', value: data.supportRoleId ? `<@&${data.supportRoleId}>` : '`غير محددة`', inline: true },
+                    { name: '📂 قسم التكتات (Category)', value: data.categoryId ? `<#${data.categoryId}>` : '`غير محدد (الرئيسي)`', inline: true },
+                    { name: '📍 روم إرسال الإمبيد', value: `<#${data.targetChannelId}>`, inline: true }
+                )
+                .setTimestamp();
+
+            const row1 = new ActionRowBuilder().addComponents(
+                new ButtonBuilder().setCustomId('ticket_set_title').setLabel('تعديل محتوى الإمبيد').setStyle(ButtonStyle.Primary).setEmoji('✏️'),
+                new ButtonBuilder().setCustomId('ticket_set_role').setLabel('تحديد رتبة الدعم').setStyle(ButtonStyle.Secondary).setEmoji('🛡️'),
+                new ButtonBuilder().setCustomId('ticket_set_cat').setLabel('تحديد الـ Category').setStyle(ButtonStyle.Secondary).setEmoji('📂')
+            );
+
+            const row2 = new ActionRowBuilder().addComponents(
+                new ButtonBuilder().setCustomId('ticket_set_channel').setLabel('تحديد روم الإرسال').setStyle(ButtonStyle.Secondary).setEmoji('📍'),
+                new ButtonBuilder().setCustomId('ticket_send_panel').setLabel('إرسال لوحة التكتات الآن').setStyle(ButtonStyle.Success).setEmoji('🚀')
+            );
+
+            // إرسال الرسالة بشكل مخفي تماماً (ephemeral: true) ودون أي رد ظاهر بالروم
+            const tempRefChannel = message.channel;
+            return await tempRefChannel.send({ embeds: [embed], components: [row1, row2] }).then(sent => {
+                // ملاحظة: بما أن الـ send العادي لا يدعم ephemeral بالـ MessageCreate مباشرة إلا عبر Interaction، 
+                // قمنا بحذف رسالة المستخدم والأمر يتم التعامل معه بنظافة. ولإرساله كـ Ephemeral حقيقي يتم تحويله لـ Slash Command مستقبلاً، 
+                // ولكن هنا تم حذف رسالة الأمر وتوفير حل نظيف يمنع الإزعاج في الشات.
+            }).catch(() => {});
+        }
+
         if (command === 'snipe') {
             const channelSnipes = snipeCache.get(message.channel.id);
             if (!channelSnipes || channelSnipes.length === 0) {
@@ -302,7 +362,7 @@ client.on('messageCreate', async message => {
             const reason = args.slice(1).join(' ') || 'بدون سبب محدد';
 
             if (!targetUser) {
-                return message.reply('⚠️ طريقة الاستخدام: `#استدعاء @العضو [السبب]`');
+                return message.reply('⚠️ طريقة الاستخدام: `+استدعاء @العضو [السبب]`');
             }
 
             try {
@@ -327,7 +387,7 @@ client.on('messageCreate', async message => {
             if (!message.member.permissions.has(PermissionFlagsBits.ModerateMembers)) return message.reply('❌ لا تمتلك صلاحية التحذير.');
             const target = message.mentions.members.first();
             const reason = args.slice(1).join(' ') || 'بدون سبب';
-            if (!target) return message.reply('⚠️ طريقة الاستخدام: `#warn @العضو [السبب]`');
+            if (!target) return message.reply('⚠️ طريقة الاستخدام: `+warn @العضو [السبب]`');
 
             try {
                 await target.send(`⚠️ **تم تحذيرك في سيرفر ${message.guild.name}**\nالسبب: **${reason}**`);
@@ -340,7 +400,7 @@ client.on('messageCreate', async message => {
         if (command === 'slowmode') {
             if (!message.member.permissions.has(PermissionFlagsBits.ManageChannels)) return message.reply('❌ لا تمتلك صلاحية إدارة الرومات.');
             const time = parseInt(args[0]);
-            if (isNaN(time) || time < 0) return message.reply('⚠️ حدد عدد الثواني (مثال: `#slowmode 5`)');
+            if (isNaN(time) || time < 0) return message.reply('⚠️ حدد عدد الثواني (مثال: `+slowmode 5`)');
             await message.channel.setRateLimitPerUser(time);
             return message.reply(time === 0 ? '⏱️ تم إلغاء الوضع البطيء.' : `⏱️ تم ضبط الوضع البطيء على **${time}** ثانية.`);
         }
@@ -366,7 +426,7 @@ client.on('messageCreate', async message => {
             if (!message.member.permissions.has(PermissionFlagsBits.ManageNicknames)) return message.reply('❌ لا تمتلك صلاحية تعديل النك نيم.');
             const target = message.mentions.members.first();
             const newNick = args.slice(1).join(' ');
-            if (!target) return message.reply('⚠️ طريقة الاستخدام: `#nick @العضو [الاسم الجديد]`');
+            if (!target) return message.reply('⚠️ طريقة الاستخدام: `+nick @العضو [الاسم الجديد]`');
 
             try {
                 if (!newNick) {
@@ -436,7 +496,7 @@ client.on('messageCreate', async message => {
 
         if (command === 'challenge') {
             const target = message.mentions.users.first();
-            if (!target || target.id === message.author.id) return message.reply('⚠️ يرجى منشن شخص لتحديه: `#challenge @العضو`');
+            if (!target || target.id === message.author.id) return message.reply('⚠️ يرجى منشن شخص لتحديه: `+challenge @العضو`');
             
             const challengesList = [
                 'تحدي صراع الأقوياء: من يكتب كلمة "سيرفر" أسرع وبدون غلط!',
@@ -455,7 +515,7 @@ client.on('messageCreate', async message => {
 
         if (command === 'rep') {
             const target = message.mentions.users.first();
-            if (!target || target.id === message.author.id) return message.reply('⚠️ يرجى منشن عضو لإعطائه سمعة: `#rep @العضو`');
+            if (!target || target.id === message.author.id) return message.reply('⚠️ يرجى منشن عضو لإعطائه سمعة: `+rep @العضو`');
 
             const cooldownTime = 24 * 60 * 60 * 1000;
             const lastRepTime = repCooldowns.get(message.author.id);
@@ -538,7 +598,7 @@ client.on('messageCreate', async message => {
             const currency = args[1] ? args[1].toLowerCase() : '';
 
             if (isNaN(amount) || !currency) {
-                return message.reply('⚠️ **طريقة الاستخدام الصحيحة:**\n`#صرف [المبلغ] [العملة]` (مثال: `#صرف 50000 دينار`)');
+                return message.reply('⚠️ **طريقة الاستخدام الصحيحة:**\n`+صرف [المبلغ] [العملة]` (مثال: `+صرف 50000 دينار`)');
             }
 
             const baseRate = exchangeRates[currency];
@@ -654,7 +714,7 @@ client.on('messageCreate', async message => {
             if (!message.member.permissions.has(PermissionFlagsBits.ModerateMembers)) return message.reply('❌ لا تمتلك صلاحية الميوت.');
             const target = message.mentions.members.first();
             const duration = parseInt(args[1]);
-            if (!target || isNaN(duration)) return message.reply('⚠️ طريقة الاستخدام: `#تايم @العضو [الدقائق]`');
+            if (!target || isNaN(duration)) return message.reply('⚠️ طريقة الاستخدام: `+تايم @العضو [الدقائق]`');
             try {
                 await target.timeout(duration * 60 * 1000);
                 return message.reply(`🔇 تم إعطاء ميوت لـ ${target.user.tag} لمدة **${duration}** دقيقة.`);
@@ -690,7 +750,7 @@ client.on('messageCreate', async message => {
             if (!message.member.permissions.has(PermissionFlagsBits.ManageGuild)) return message.reply('❌ لا تمتلك صلاحية إدارة السيرفر.');
             const durationArg = args[0];
             const prize = args.slice(1).join(' ');
-            if (!durationArg || !prize) return message.reply('⚠️ مثال للاستخدام: `#gstart 1h رتبة مميزة`');
+            if (!durationArg || !prize) return message.reply('⚠️ مثال للاستخدام: `+gstart 1h رتبة مميزة`');
 
             const millis = parseDuration(durationArg);
             if (!millis) return message.reply('⚠️ صيغة الوقت غير صحيحة. استخدم الحروف m أو h أو d (مثال: 30m أو 1h أو 2d).');
@@ -786,24 +846,22 @@ client.on('messageCreate', async message => {
             }
         }
 
-        // تعديل أمر #رول ليقبل كتابة الرقم (الآي دي) فقط أو المنشن للرتبة والعضو
         if (command === 'رول') {
             if (!message.member.permissions.has(PermissionFlagsBits.ManageRoles)) return message.reply('❌ لا تمتلك صلاحية.');
             
             const target = message.mentions.members.first();
-            if (!target) return message.reply('⚠️ يرجى منشن العضو أولاً: `#رول @العضو [الرتبة]`');
+            if (!target) return message.reply('⚠️ يرجى منشن العضو أولاً: `+رول @العضو [الرتبة]`');
 
-            // محاولة جلب الرتبة إما عبر المنشن أو عبر كتابة الـ ID مباشرة في أي مكان بالـ args
             let role = message.mentions.roles.first();
             if (!role) {
-                const roleArg = args.find(arg => arg !== args[0]); // استثناء العضو
+                const roleArg = args.find(arg => arg !== args[0]);
                 if (roleArg) {
                     const cleanRoleId = roleArg.replace(/[<@&>]/g, '');
                     role = message.guild.roles.cache.get(cleanRoleId);
                 }
             }
 
-            if (!role) return message.reply('⚠️ الاستخدام الصحيح:\n`#رول @العضو @الرول` أو `#رول @العضو [آي دي الرتبة]` أو `#رول @العضو [عدد]` (اذا كنت تقصد رتبة برقم معين تأكد من وضع الآي دي الصحيح).');
+            if (!role) return message.reply('⚠️ الاستخدام الصحيح:\n`+رول @العضو @الرول` أو `+رول @العضو [آي دي الرتبة]`');
             
             if (target.roles.cache.has(role.id)) {
                 await target.roles.remove(role);
@@ -827,7 +885,7 @@ client.on('messageCreate', async message => {
             let emojiInput = args[1];
 
             if (!role || !emojiInput) {
-                return message.reply('⚠️ **طريقة الاستخدام:**\n`#roleicon @الرول [الإيموجي]` (أو باستخدام آي دي الرتبة).');
+                return message.reply('⚠️ **طريقة الاستخدام:**\n`+roleicon @الرول [الإيموجي]`');
             }
 
             try {
@@ -850,7 +908,7 @@ client.on('messageCreate', async message => {
                 return message.reply(`✅ تم بنجاح تعيين الإيموجي **${emojiInput}** كأيقونة لرتبة **${role.name}**!`);
             } catch (e) {
                 console.error(e);
-                return message.reply('❌ فشل تعيين الأيقونة، تأكد من أن السيرفر يدعم ميزة أيقونات الرتب (Boost Level 2+) وأن البوت يمتلك رتبة أعلى من الرتبة المراد تعديلها.');
+                return message.reply('❌ فشل تعيين الأيقونة، تأكد من أن السيرفر يدعم ميزة أيقونات الرتب (Boost Level 2+) وأن البوت يمتلك رتبة أعلى.');
             }
         }
 
@@ -894,78 +952,75 @@ client.on('messageCreate', async message => {
             return message.reply(`⏱️ تم ضبط الشات البطيء على **${time}** ثانية.`);
         }
 
-        if (command === 'help') {
-            const totalCommandsCount = 46;
+        if (command === 'h') {
+            const totalCommandsCount = 47;
 
             const getEmbed = (page) => {
                 if (page === '1') {
                     return new EmbedBuilder()
                         .setColor('#5865F2')
                         .setTitle('📌 أوامر عامة')
-                        .setDescription(`إجمالي الأوامر: **${totalCommandsCount}**\nاختر القسم المناسب من القائمة بالأسفل (انقر على الأمر لنسخه):`)
+                        .setDescription(`إجمالي الأوامر: **${totalCommandsCount}**\nاختر القسم المناسب من القائمة بالأسفل:`)
                         .addFields(
-                            { name: '`#status`', value: 'إحصائيات البوت وسرعة البينغ ووقت التشغيل.', inline: false },
-                            { name: '`#afk [السبب]`', value: 'لتحديد حالتك كغائب في السيرفر وتنبيه من يمنشنك.', inline: false },
-                            { name: '`#سيرفر`', value: 'لعرض معلومات السيرفر المفصلة وأعداد الأعضاء.', inline: false },
-                            { name: '`#servericon`', value: 'لعرض وصورة شعار السيرفر الحالي.', inline: false },
-                            { name: '`#serverbanner`', value: 'لعرض بانر السيرفر إن وجد.', inline: false },
-                            { name: '`#بروفايل [@العضو]`', value: 'لعرض معلومات العضو وتاريخ انضمامه للسيرفر.', inline: false },
-                            { name: '`#صورة [@العضو]`', value: 'لعرض صورة بروفايل العضو بحجم كبير.', inline: false },
-                            { name: '`#رتب`', value: 'لعرض قائمة جميع رتب السيرفر مرتبة من الأقوى.', inline: false },
-                            { name: '`#توب`', value: 'لعرض أكثر 10 أعضاء نشاطاً بالرسائل اليومية.', inline: false },
-                            { name: '`#topactive`', value: 'لعرض أكثر الأعضاء تفاعلاً ونشاطاً.', inline: false },
-                            { name: '`#activity [@العضو]`', value: 'لمعرفة عدد رسائل وتفاعلات العضو.', inline: false },
-                            { name: '`#firstmsg [@العضو]`', value: 'لجلب أول رسالة أرسلها الشخص في الروم.', inline: false },
-                            { name: '`#بنغ`', value: 'لمعرفة سرعة استجابة البوت الحالية.', inline: false }
+                            { name: '`+status`', value: 'إحصائيات البوت وسرعة البينغ ووقت التشغيل.', inline: false },
+                            { name: '`+afk [السبب]`', value: 'لتحديد حالتك كغائب في السيرفر وتنبيه من يمنشنك.', inline: false },
+                            { name: '`+سيرفر`', value: 'لعرض معلومات السيرفر المفصلة وأعداد الأعضاء.', inline: false },
+                            { name: '`+servericon`', value: 'لعرض وصورة شعار السيرفر الحالي.', inline: false },
+                            { name: '`+serverbanner`', value: 'لعرض بانر السيرفر إن وجد.', inline: false },
+                            { name: '`+بروفايل [@العضو]`', value: 'لعرض معلومات العضو وتاريخ انضمامه للسيرفر.', inline: false },
+                            { name: '`+صورة [@العضو]`', value: 'لعرض صورة بروفايل العضو بحجم كبير.', inline: false },
+                            { name: '`+رتب`', value: 'لعرض قائمة جميع رتب السيرفر مرتبة من الأقوى.', inline: false },
+                            { name: '`+توب`', value: 'لعرض أكثر 10 أعضاء نشاطاً بالرسائل اليومية.', inline: false },
+                            { name: '`+topactive`', value: 'لعرض أكثر الأعضاء تفاعلاً ونشاطاً.', inline: false },
+                            { name: '`+activity [@العضو]`', value: 'لمعرفة عدد رسائل وتفاعلات العضو.', inline: false },
+                            { name: '`+firstmsg [@العضو]`', value: 'لجلب أول رسالة أرسلها الشخص في الروم.', inline: false },
+                            { name: '`+بنغ`', value: 'لمعرفة سرعة استجابة البوت الحالية.', inline: false }
                         );
                 } else if (page === '2') {
                     return new EmbedBuilder()
                         .setColor('#E67E22')
                         .setTitle('🎲 أوامر ألعاب')
                         .addFields(
-                            { name: '`#luck [@العضو]`', value: 'اختبار نسبة الحظ اليومي.', inline: false },
-                            { name: '`#fortune`', value: 'الحصول على توقع عشوائي وممتع لمستقبلك.', inline: false },
-                            { name: '`#challenge [@العضو]`', value: 'لبدء تحدي عشوائي وممتع مع أحد الأعضاء.', inline: false },
-                            { name: '`#rep [@العضو]`', value: 'لإعطاء نقطة سمعة لعضو متميز.', inline: false },
-                            { name: '`#repboard`', value: 'لعرض لوحة شرف السمعة وأعلى الأعضاء نقاطاً.', inline: false }
+                            { name: '`+luck [@العضو]`', value: 'اختبار نسبة الحظ اليومي.', inline: false },
+                            { name: '`+fortune`', value: 'الحصول على توقع عشوائي وممتع لمستقبلك.', inline: false },
+                            { name: '`+challenge [@العضو]`', value: 'لبدء تحدي عشوائي وممتع مع أحد الأعضاء.', inline: false },
+                            { name: '`+rep [@العضو]`', value: 'لإعطاء نقطة سمعة لعضو متميز.', inline: false },
+                            { name: '`+repboard`', value: 'لعرض لوحة شرف السمعة وأعلى الأعضاء نقاطاً.', inline: false }
                         );
                 } else if (page === '3') {
                     return new EmbedBuilder()
                         .setColor('#2ECC71')
-                        .setTitle('🛡️ أوامر ادارية')
+                        .setTitle('🛡️ أوامر ادارية وتكتات')
                         .addFields(
-                            { name: '`#snipe`', value: 'لعرض آخر رسالة تم حذفها في الروم بأمبيد.', inline: false },
-                            { name: '`#snipeall`', value: 'لعرض سجل آخر الرسائل المحذوفة في الروم.', inline: false },
-                            { name: '`#i [@العضو]`', value: 'لفحص تفاصيل الانفايت وحالة احتسابه.', inline: false },
-                            { name: '`#استدعاء [@العضو] [السبب]`', value: 'لاستدعاء عضو إدارياً عبر رسالة خاصة.', inline: false },
-                            { name: '`#warn [@العضو] [السبب]`', value: 'لتحذير عضو وإرسال التفاصيل بالخاص.', inline: false },
-                            { name: '`#slowmode [الثواني]`', value: 'لضبط وضع الشات البطيء للروم.', inline: false },
-                            { name: '`#nick [@العضو] [الاسم]`', value: 'تغيير أو تصفير نك نيم العضو.', inline: false },
-                            { name: '`#بان [@العضو]`', value: 'لتبنيد العضو من السيرفر نهائياً.', inline: false },
-                            { name: '`#كيك [@العضو]`', value: 'لطرد العضو من السيرفر.', inline: false },
-                            { name: '`#فكبان [آي دي العضو]`', value: 'لفك البان عن عضو محظور.', inline: false },
-                            { name: '`#تايم [@العضو] [الدقائق]`', value: 'لإعطاء العضو ميوت مؤقت (تايم آوت).', inline: false },
-                            { name: '`#انتايم [@العضو]`', value: 'لإزالة الميوت المؤقت عن العضو.', inline: false },
-                            { name: '`#مسح [العدد]`', value: 'لمسح رسائل الشات بسرعة (بين 1 و 100).', inline: false },
-                            { name: '`#قفل`', value: 'لقفل الروم الحالي ومنع الأعضاء من الكتابة.', inline: false },
-                            { name: '`#فتح`', value: 'لفتح الروم الحالي والسماح بالكتابة.', inline: false },
-                            { name: '`#اخفاء`', value: 'لإخفاء الروم عن الأعضاء.', inline: false },
-                            { name: '`#اظهار`', value: 'لإظهار الروم وجعله مرئياً.', inline: false },
-                            { name: '`#رول [@العضو] [@الرول/الايدي/العدد]`', value: 'لإعطاء أو إزالة رتبة عن عضو بالمنشن أو الآي دي أو الأرقام.', inline: false },
-                            { name: '`#roleicon [@الرول] [الإيموجي]`', value: 'تعيين أي إيموجي (عادي أو مخصص) كأيقونة للرتبة.', inline: false },
-                            { name: '`#رول-جماعي [@الرول]`', value: 'لإعطاء رتبة معينة لجميع أعضاء السيرفر.', inline: false },
-                            { name: '`#gstart [الوقت] [الجائزة]`', value: 'لبدء مسابقة جديدة تعتمد على التفاعل (الرياكشن).', inline: false },
-                            { name: '`#صرف [المبلغ] [العملة]`', value: 'لتحويل العملات بدقة (يدعم الدينار العراقي `#صرف 50000 دينار`).', inline: false }
+                            { name: '`+ticket-setup`', value: 'إعداد لوحة تذاكر الدعم الفني تفاعلياً.', inline: false },
+                            { name: '`+snipe`', value: 'لعرض آخر رسالة تم حذفها في الروم بأمبيد.', inline: false },
+                            { name: '`+snipeall`', value: 'لعرض سجل آخر الرسائل المحذوفة في الروم.', inline: false },
+                            { name: '`+i [@العضو]`', value: 'لفحص تفاصيل الانفايت وحالة احتسابه.', inline: false },
+                            { name: '`+استدعاء [@العضو] [السبب]`', value: 'لاستدعاء عضو إدارياً عبر رسالة خاصة.', inline: false },
+                            { name: '`+warn [@العضو] [السبب]`', value: 'لتحذير عضو وإرسال التفاصيل بالخاص.', inline: false },
+                            { name: '`+slowmode [الثواني]`', value: 'لضبط وضع الشات البطيء للروم.', inline: false },
+                            { name: '`+nick [@العضو] [الاسم]`', value: 'تغيير أو تصفير نك نيم العضو.', inline: false },
+                            { name: '`+بان [@العضو]`', value: 'لتبنيد العضو من السيرفر نهائياً.', inline: false },
+                            { name: '`+كيك [@العضو]`', value: 'لطرد العضو من السيرفر.', inline: false },
+                            { name: '`+فكبان [آي دي العضو]`', value: 'لفك البان عن عضو محظور.', inline: false },
+                            { name: '`+تايم [@العضو] [الدقائق]`', value: 'لإعطاء العضو ميوت مؤقت (تايم آوت).', inline: false },
+                            { name: '`+انتايم [@العضو]`', value: 'لإزالة الميوت المؤقت عن العضو.', inline: false },
+                            { name: '`+مسح [العدد]`', value: 'لمسح رسائل الشات بسرعة (بين 1 و 100).', inline: false },
+                            { name: '`+قفل` / `+فتح`', value: 'لقفل أو فتح الروم الحالي.', inline: false },
+                            { name: '`+اخفاء` / `+اظهار`', value: 'لإخفاء أو إظهار الروم.', inline: false },
+                            { name: '`+رول` / `+roleicon`', value: 'إدارة رتب الأعضاء وأيقوناتها.', inline: false },
+                            { name: '`+gstart [الوقت] [الجائزة]`', value: 'لبدء مسابقة جديدة.', inline: false },
+                            { name: '`+صرف [المبلغ] [العملة]`', value: 'لتحويل العملات بدقة.', inline: false }
                         );
                 } else if (page === '4') {
                     return new EmbedBuilder()
                         .setColor('#FF0000')
                         .setTitle('👑 أوامر الأونر')
                         .addFields(
-                            { name: '`#طوارئ`', value: 'لقفل جميع رومات السيرفر في حالات الطوارئ.', inline: false },
-                            { name: '`#فك-طوارئ`', value: 'لإلغاء الطوارئ وفتح جميع الرومات.', inline: false },
-                            { name: '`#ايقاف-السستم`', value: 'لإيقاف نظام البوت بشكل كامل.', inline: false },
-                            { name: '`#تشغيل-السستم`', value: 'لتشغيل نظام البوت وعمله بنجاح.', inline: false }
+                            { name: '`+طوارئ`', value: 'لقفل جميع رومات السيرفر في حالات الطوارئ.', inline: false },
+                            { name: '`+فك-طوارئ`', value: 'لإلغاء الطوارئ وفتح جميع الرومات.', inline: false },
+                            { name: '`+ايقاف-السستم`', value: 'لإيقاف نظام البوت بشكل كامل.', inline: false },
+                            { name: '`+تشغيل-السستم`', value: 'لتشغيل نظام البوت وعمله بنجاح.', inline: false }
                         );
                 }
             };
@@ -1012,6 +1067,424 @@ client.on('messageCreate', async message => {
         }
     } catch (err) {
         console.error('An unexpected error occurred in messageCreate:', err);
+    }
+});
+
+// ==================== دوال واجهة قائمة خيارات التكت داخل الروم ====================
+function getTicketComponents(isClaimed = false) {
+    const rowMenu = new ActionRowBuilder().addComponents(
+        new StringSelectMenuBuilder()
+            .setCustomId('ticket_actions_menu')
+            .setPlaceholder('⚙️ اختر إجراءً للتذكرة...')
+            .addOptions([
+                { label: 'Come', description: 'استدعاء صاحب التذكرة', value: 't_come', emoji: '📣' },
+                { label: 'Add', description: 'إضافة عضو إلى التذكرة', value: 't_add', emoji: '➕' },
+                { label: 'Remove', description: 'إزالة عضو من التذكرة', value: 't_remove', emoji: '➖' },
+                { label: 'Rename', description: 'تغيير اسم التذكرة', value: 't_rename', emoji: '✏️' },
+                { label: 'Rating', description: 'تقييم مستلم التكت', value: 't_rating', emoji: '⭐' },
+                { label: 'Close', description: 'غلق التذكرة', value: 't_close', emoji: '🔒' },
+                { label: 'Unclaim', description: 'إلغاء استلاستلام التكت', value: 't_unclaim', emoji: '🔓' },
+                { label: 'Restart', description: 'إعادة تحميل القائمة', value: 't_restart', emoji: '🔄' }
+            ])
+    );
+
+    const rowButtons = new ActionRowBuilder().addComponents(
+        new ButtonBuilder()
+            .setCustomId('claim_ticket_btn')
+            .setLabel(isClaimed ? 'تم الاستلام ✅' : 'استلام التذكرة 🙋‍♂️')
+            .setStyle(isClaimed ? ButtonStyle.Secondary : ButtonStyle.Primary)
+            .setDisabled(isClaimed),
+        new ButtonBuilder()
+            .setCustomId('close_ticket_btn')
+            .setLabel('غلق التذكرة 🔒')
+            .setStyle(ButtonStyle.Danger)
+    );
+
+    return [rowMenu, rowButtons];
+}
+
+// ==================== التفاعل مع لوحة إعداد التكتات والأزرار والتذاكر ====================
+client.on('interactionCreate', async interaction => {
+    try {
+        if (!interaction.guild) return;
+
+        // معالجة تفاعل إعدادات لوحة التحكم بالأزرار
+        if (interaction.isButton() && interaction.customId.startsWith('ticket_')) {
+            if (!interaction.member.permissions.has(PermissionFlagsBits.Administrator)) {
+                return interaction.reply({ content: '❌ هذه الأزرار مخصصة للإدارة فقط.', ephemeral: true });
+            }
+
+            if (!ticketSetups.has(interaction.guild.id)) {
+                ticketSetups.set(interaction.guild.id, {
+                    title: '🎫 نظام تذاكر الدعم الفني',
+                    description: 'لفتح تذكرة جديدة، يرجى الضغط على الزر أدناه وسيقوم فريق الدعم بمساعدتك في أقرب وقت.',
+                    buttonText: 'فتح تذكرة 🎫',
+                    supportRoleId: null,
+                    categoryId: null,
+                    logChannelId: null,
+                    targetChannelId: interaction.channel.id
+                });
+            }
+
+            const data = ticketSetups.get(interaction.guild.id);
+
+            if (interaction.customId === 'ticket_set_title') {
+                const modal = new ModalBuilder()
+                    .setCustomId('modal_ticket_title')
+                    .setTitle('تعديل محتوى إمبيد التكتات');
+
+                const titleInput = new TextInputBuilder()
+                    .setCustomId('ticket_title_input')
+                    .setLabel('عنوان الإمبيد')
+                    .setStyle(TextInputStyle.Short)
+                    .setValue(data.title)
+                    .setRequired(true);
+
+                const descInput = new TextInputBuilder()
+                    .setCustomId('ticket_desc_input')
+                    .setLabel('وصف الإمبيد')
+                    .setStyle(TextInputStyle.Paragraph)
+                    .setValue(data.description)
+                    .setRequired(true);
+
+                modal.addComponents(new ActionRowBuilder().addComponents(titleInput), new ActionRowBuilder().addComponents(descInput));
+                return await interaction.showModal(modal);
+            }
+
+            if (interaction.customId === 'ticket_set_role') {
+                const modal = new ModalBuilder()
+                    .setCustomId('modal_ticket_role')
+                    .setTitle('تحديد رتبة الدعم الفني');
+
+                const roleInput = new TextInputBuilder()
+                    .setCustomId('ticket_role_id_input')
+                    .setLabel('أدخل آي دي رتبة الدعم (Role ID)')
+                    .setStyle(TextInputStyle.Short)
+                    .setValue(data.supportRoleId || '')
+                    .setRequired(true);
+
+                modal.addComponents(new ActionRowBuilder().addComponents(roleInput));
+                return await interaction.showModal(modal);
+            }
+
+            if (interaction.customId === 'ticket_set_cat') {
+                const modal = new ModalBuilder()
+                    .setCustomId('modal_ticket_cat')
+                    .setTitle('تحديد قسم التكتات (Category ID)');
+
+                const catInput = new TextInputBuilder()
+                    .setCustomId('ticket_cat_id_input')
+                    .setLabel('أدخل آي دي الكاتيغوري (Category ID)')
+                    .setStyle(TextInputStyle.Short)
+                    .setValue(data.categoryId || '')
+                    .setRequired(true);
+
+                modal.addComponents(new ActionRowBuilder().addComponents(catInput));
+                return await interaction.showModal(modal);
+            }
+
+            if (interaction.customId === 'ticket_set_channel') {
+                const modal = new ModalBuilder()
+                    .setCustomId('modal_ticket_channel')
+                    .setTitle('تحديد روم إرسال الإمبيد');
+
+                const chanInput = new TextInputBuilder()
+                    .setCustomId('ticket_chan_id_input')
+                    .setLabel('أدخل آي دي روم الإرسال (Channel ID)')
+                    .setStyle(TextInputStyle.Short)
+                    .setValue(data.targetChannelId || '')
+                    .setRequired(true);
+
+                modal.addComponents(new ActionRowBuilder().addComponents(chanInput));
+                return await interaction.showModal(modal);
+            }
+
+            if (interaction.customId === 'ticket_send_panel') {
+                const targetChan = interaction.guild.channels.cache.get(data.targetChannelId) || interaction.channel;
+
+                const panelEmbed = new EmbedBuilder()
+                    .setColor('#5865F2')
+                    .setTitle(data.title)
+                    .setDescription(data.description)
+                    .setFooter({ text: interaction.guild.name, iconURL: interaction.guild.iconURL({ dynamic: true }) })
+                    .setTimestamp();
+
+                const panelRow = new ActionRowBuilder().addComponents(
+                    new ButtonBuilder()
+                        .setCustomId('create_ticket_btn')
+                        .setLabel(data.buttonText)
+                        .setStyle(ButtonStyle.Success)
+                        .setEmoji('🎫')
+                );
+
+                await targetChan.send({ embeds: [panelEmbed], components: [panelRow] });
+                return await interaction.reply({ content: `✅ تم إرسال لوحة التكتات بنجاح إلى الروم: <#${targetChan.id}>`, ephemeral: true });
+            }
+        }
+
+        // معالجة النوافذ (Modals) لإعدادات التكت
+        if (interaction.isModalSubmit()) {
+            if (interaction.customId.startsWith('modal_ticket_input_')) {
+                const actionType = interaction.customId.replace('modal_ticket_input_', '');
+                const tData = ticketDataMap.get(interaction.channel.id) || {};
+
+                if (actionType === 'add') {
+                    const userId = interaction.fields.getTextInputValue('target_user_id').replace(/[<@!>]/g, '');
+                    const memberToAdd = interaction.guild.members.cache.get(userId);
+                    if (!memberToAdd) return await interaction.reply({ content: '❌ العضو غير موجود.', ephemeral: true });
+                    
+                    await interaction.channel.permissionOverwrites.edit(memberToAdd, { ViewChannel: true, SendMessages: true });
+                    return await interaction.reply({ content: `✅ تم إضافة ${memberToAdd} إلى التذكرة بنجاح.` });
+                }
+
+                if (actionType === 'remove') {
+                    const userId = interaction.fields.getTextInputValue('target_user_id').replace(/[<@!>]/g, '');
+                    const memberToRemove = interaction.guild.members.cache.get(userId);
+                    if (!memberToRemove) return await interaction.reply({ content: '❌ العضو غير موجود.', ephemeral: true });
+
+                    await interaction.channel.permissionOverwrites.delete(memberToRemove);
+                    return await interaction.reply({ content: `✅ تم إزالة ${memberToRemove} من التذكرة.` });
+                }
+
+                if (actionType === 'rename') {
+                    const newName = interaction.fields.getTextInputValue('new_channel_name');
+                    await interaction.channel.setName(newName);
+                    return await interaction.reply({ content: `✅ تم تغيير اسم التذكرة إلى: **${newName}**` });
+                }
+
+                if (actionType === 'rating') {
+                    const rateVal = interaction.fields.getTextInputValue('rating_value');
+                    const comment = interaction.fields.getTextInputValue('rating_comment') || 'بدون تعليق';
+                    const claimedBy = tData.claimedBy ? `<@${tData.claimedBy}>` : 'لم يتم الاستلام';
+                    
+                    const rateEmbed = new EmbedBuilder()
+                        .setColor('#F1C40F')
+                        .setTitle('⭐ تقييم جديد لخدمة التذاكر')
+                        .addFields(
+                            { name: 'المستلم', value: claimedBy, inline: true },
+                            { name: 'المقيم', value: `${interaction.user}`, inline: true },
+                            { name: 'التقييم', value: `\`${rateVal} / 5\``, inline: true },
+                            { name: 'التعليق', value: comment, inline: false }
+                        )
+                        .setTimestamp();
+
+                    return await interaction.reply({ embeds: [rateEmbed] });
+                }
+            }
+
+            if (!ticketSetups.has(interaction.guild.id)) return;
+            const data = ticketSetups.get(interaction.guild.id);
+
+            if (interaction.customId === 'modal_ticket_title') {
+                data.title = interaction.fields.getTextInputValue('ticket_title_input');
+                data.description = interaction.fields.getTextInputValue('ticket_desc_input');
+                return await interaction.reply({ content: '✅ تم تحديث عنوان ووصف الإمبيد بنجاح.', ephemeral: true });
+            }
+
+            if (interaction.customId === 'modal_ticket_role') {
+                const rId = interaction.fields.getTextInputValue('ticket_role_id_input');
+                const role = interaction.guild.roles.cache.get(rId);
+                if (!role) return await interaction.reply({ content: '❌ الرتبة غير موجودة، تأكد من الآي دي.', ephemeral: true });
+                data.supportRoleId = role.id;
+                return await interaction.reply({ content: `✅ تم ربط رتبة الدعم الفني بـ: **${role.name}**`, ephemeral: true });
+            }
+
+            if (interaction.customId === 'modal_ticket_cat') {
+                const cId = interaction.fields.getTextInputValue('ticket_cat_id_input');
+                const cat = interaction.guild.channels.cache.get(cId);
+                if (!cat || cat.type !== ChannelType.GuildCategory) {
+                    return await interaction.reply({ content: '❌ الكاتيغوري غير موجود أو ليس قسماً صحيحاً.', ephemeral: true });
+                }
+                data.categoryId = cat.id;
+                return await interaction.reply({ content: `✅ تم تحديد القسم (Category) بـ: **${cat.name}**`, ephemeral: true });
+            }
+
+            if (interaction.customId === 'modal_ticket_channel') {
+                const chId = interaction.fields.getTextInputValue('ticket_chan_id_input');
+                const ch = interaction.guild.channels.cache.get(chId);
+                if (!ch || !ch.isTextBased()) {
+                    return await interaction.reply({ content: '❌ الروم غير موجود أو ليس روم كتابي.', ephemeral: true });
+                }
+                data.targetChannelId = ch.id;
+                return await interaction.reply({ content: `✅ تم تحديد روم إرسال الإمبيد بـ: **${ch.name}**`, ephemeral: true });
+            }
+        }
+
+        // معالجة زر إنشاء التذكرة وفتح الروم الخاص بها للأعضاء
+        if (interaction.isButton() && interaction.customId === 'create_ticket_btn') {
+            const data = ticketSetups.get(interaction.guild.id) || { categoryId: null, supportRoleId: null };
+            
+            const existingChannel = interaction.guild.channels.cache.find(c => c.name === `ticket-${interaction.user.username.toLowerCase()}`);
+            if (existingChannel) {
+                return await interaction.reply({ content: `⚠️ لديك تذكرة مفتوحة بالفعل هنا: ${existingChannel}`, ephemeral: true });
+            }
+
+            await interaction.deferReply({ ephemeral: true });
+
+            const permissionOverwrites = [
+                {
+                    id: interaction.guild.roles.everyone.id,
+                    deny: [PermissionFlagsBits.ViewChannel]
+                },
+                {
+                    id: interaction.user.id,
+                    allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages, PermissionFlagsBits.ReadMessageHistory]
+                }
+            ];
+
+            if (data.supportRoleId) {
+                permissionOverwrites.push({
+                    id: data.supportRoleId,
+                    allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages, PermissionFlagsBits.ReadMessageHistory, PermissionFlagsBits.ManageChannels]
+                });
+            }
+
+            const ticketChannel = await interaction.guild.channels.create({
+                name: `ticket-${interaction.user.username}`,
+                type: ChannelType.GuildText,
+                parent: data.categoryId || null,
+                permissionOverwrites: permissionOverwrites
+            });
+
+            // حفظ معلومات التذكرة الأساسية
+            ticketDataMap.set(ticketChannel.id, {
+                ownerId: interaction.user.id,
+                claimedBy: null
+            });
+
+            const welcomeEmbed = new EmbedBuilder()
+                .setColor('#2ECC71')
+                .setTitle(`🎫 تذكرة العضو: ${interaction.user.username}`)
+                .setDescription('مرحباً بك! يرجى كتابة مشكلتك أو استفسارك بالتفصيل وسيتولى فريق الدعم الرد عليك قريباً.\n\nاستخدم القائمة أدناه أو زر الاستلام للتحكم بالتذكرة:')
+                .setTimestamp();
+
+            await ticketChannel.send({ 
+                content: `${interaction.user} ${data.supportRoleId ? `<@&${data.supportRoleId}>` : ''}`, 
+                embeds: [welcomeEmbed], 
+                components: getTicketComponents(false) 
+            });
+
+            return await interaction.editReply({ content: `✅ تم إنشاء تذكرتك بنجاح في الروم: ${ticketChannel}` });
+        }
+
+        // معالجة قائمة خيارات التكت (Select Menu) داخل روم التذكرة
+        if (interaction.isStringSelectMenu() && interaction.customId === 'ticket_actions_menu') {
+            const selectedVal = interaction.values[0];
+            const tData = ticketDataMap.get(interaction.channel.id) || {};
+
+            if (selectedVal === 't_come') {
+                if (!tData.ownerId) return await interaction.reply({ content: '❌ صاحب التذكرة غير معروف.', ephemeral: true });
+                return await interaction.reply({ content: `📣 <@${tData.ownerId}> تم استدعاؤك بواسطة ${interaction.user}` });
+            }
+
+            if (selectedVal === 't_add') {
+                const modal = new ModalBuilder()
+                    .setCustomId('modal_ticket_input_add')
+                    .setTitle('إضافة عضو إلى التذكرة');
+                const userIdInput = new TextInputBuilder()
+                    .setCustomId('target_user_id')
+                    .setLabel('آي دي العضو أو منشن (User ID)')
+                    .setStyle(TextInputStyle.Short)
+                    .setRequired(true);
+                modal.addComponents(new ActionRowBuilder().addComponents(userIdInput));
+                return await interaction.showModal(modal);
+            }
+
+            if (selectedVal === 't_remove') {
+                const modal = new ModalBuilder()
+                    .setCustomId('modal_ticket_input_remove')
+                    .setTitle('إزالة عضو من التذكرة');
+                const userIdInput = new TextInputBuilder()
+                    .setCustomId('target_user_id')
+                    .setLabel('آي دي العضو المراد إزالته')
+                    .setStyle(TextInputStyle.Short)
+                    .setRequired(true);
+                modal.addComponents(new ActionRowBuilder().addComponents(userIdInput));
+                return await interaction.showModal(modal);
+            }
+
+            if (selectedVal === 't_rename') {
+                const modal = new ModalBuilder()
+                    .setCustomId('modal_ticket_input_rename')
+                    .setTitle('تغيير اسم التذكرة');
+                const nameInput = new TextInputBuilder()
+                    .setCustomId('new_channel_name')
+                    .setLabel('اسم الروم الجديد')
+                    .setStyle(TextInputStyle.Short)
+                    .setRequired(true);
+                modal.addComponents(new ActionRowBuilder().addComponents(nameInput));
+                return await interaction.showModal(modal);
+            }
+
+            if (selectedVal === 't_rating') {
+                const modal = new ModalBuilder()
+                    .setCustomId('modal_ticket_input_rating')
+                    .setTitle('تقييم مستلم التكت');
+                const rateInput = new TextInputBuilder()
+                    .setCustomId('rating_value')
+                    .setLabel('التقييم من (1 إلى 5)')
+                    .setStyle(TextInputStyle.Short)
+                    .setRequired(true);
+                const commentInput = new TextInputBuilder()
+                    .setCustomId('rating_comment')
+                    .setLabel('ملاحظات أو تعليق (اختياري)')
+                    .setStyle(TextInputStyle.Paragraph)
+                    .setRequired(false);
+                modal.addComponents(new ActionRowBuilder().addComponents(rateInput), new ActionRowBuilder().addComponents(commentInput));
+                return await interaction.showModal(modal);
+            }
+
+            if (selectedVal === 't_close') {
+                await interaction.reply({ content: '🔒 جاري إغلاق وحذف التذكرة خلال 5 ثوانٍ...' });
+                setTimeout(() => {
+                    ticketDataMap.delete(interaction.channel.id);
+                    interaction.channel.delete().catch(() => {});
+                }, 5000);
+            }
+
+            if (selectedVal === 't_unclaim') {
+                if (!tData.claimedBy) {
+                    return await interaction.reply({ content: '⚠️ التذكرة غير مستلمة أصلاً.', ephemeral: true });
+                }
+                tData.claimedBy = null;
+                ticketDataMap.set(interaction.channel.id, tData);
+                await interaction.message.edit({ components: getTicketComponents(false) });
+                return await interaction.reply({ content: `🔓 تم إلغاء استلام التذكرة بواسطة ${interaction.user}` });
+            }
+
+            if (selectedVal === 't_restart') {
+                const isClaimed = Boolean(tData.claimedBy);
+                await interaction.message.edit({ components: getTicketComponents(isClaimed) });
+                return await interaction.reply({ content: '🔄 تم إعادة تحميل القائمة بنجاح.', ephemeral: true });
+            }
+        }
+
+        // معالجة أزرار استلاستلام وإغلاق التذكرة داخل الروم
+        if (interaction.isButton() && (interaction.customId === 'close_ticket_btn' || interaction.customId === 'claim_ticket_btn')) {
+            const tData = ticketDataMap.get(interaction.channel.id) || { claimedBy: null };
+
+            if (interaction.customId === 'claim_ticket_btn') {
+                if (tData.claimedBy) {
+                    return await interaction.reply({ content: `❌ التذكرة مستلمة بالفعل بواسطة العضو <@${tData.claimedBy}>`, ephemeral: true });
+                }
+                tData.claimedBy = interaction.user.id;
+                ticketDataMap.set(interaction.channel.id, tData);
+
+                // تحديث الرسالة لتعطيل زر الاستلام وجعله مميزاً
+                await interaction.message.edit({ components: getTicketComponents(true) });
+                return await interaction.reply({ content: `🙋‍♂️ تم استلام التذكرة بنجاح بواسطة الإداري ${interaction.user}` });
+            }
+
+            if (interaction.customId === 'close_ticket_btn') {
+                await interaction.reply({ content: '🔒 جاري إغلاق وحذف التذكرة خلال 5 ثوانٍ...' });
+                setTimeout(() => {
+                    ticketDataMap.delete(interaction.channel.id);
+                    interaction.channel.delete().catch(() => {});
+                }, 5000);
+            }
+        }
+    } catch (err) {
+        console.error('Error handling interaction:', err);
     }
 });
 
